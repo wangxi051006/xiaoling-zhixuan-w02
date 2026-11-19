@@ -1,0 +1,55 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>校零智选 · 交互演示（手账）</title>
+<link rel="stylesheet" href="app.css">
+</head>
+<body>
+<div class="page">
+
+  <header class="masthead">
+    <div class="brand">
+      <span class="logo">零</span>
+      <div><b>校零智选</b><small>校园零售即时服务 · 交互演示</small></div>
+    </div>
+    <nav class="switcher" id="switcher">
+      <button class="sw on" data-client="user"><i>01</i>用户端</button>
+      <button class="sw" data-client="delivery"><i>02</i>配送端</button>
+      <button class="sw" data-client="admin"><i>03</i>管理端</button>
+    </nav>
+    <button class="reset" data-act="reset">重置演示</button>
+  </header>
+
+  <main class="body">
+    <section class="stage">
+      <div class="device">
+        <div class="island"></div>
+        <div class="screen app-user" id="screen"></div>
+        <div class="veil" id="veil"></div>
+        <div class="sheet" id="sheet"></div>
+        <div class="toast" id="toast"></div>
+      </div>
+      <p class="stage-hint" id="hint">点一点试试：搜索、加购、结算、下单</p>
+    </section>
+
+    <aside class="tips">
+      <h3>这一端能点</h3>
+      <ul id="tips"></ul>
+      <div class="tipcard">
+        <b>演示说明</b>
+        <p>三端共用一个演示数据：用户下单后，订单会出现在管理端；配送端接单后可推进状态。</p>
+      </div>
+    </aside>
+  </main>
+
+</div>
+
+<script src="app.js"></script>
+<script src="ui-user.js"></script>
+<script src="ui-delivery.js"></script>
+<script src="ui-admin.js"></script>
+<script>render();</script>
+</body>
+</html>

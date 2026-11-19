@@ -1,0 +1,471 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>NO.01 价签 · 校零智选 视觉方向</title>
+<style>
+/* ================= 画布 ================= */
+*{margin:0;padding:0;box-sizing:border-box}
+html{-webkit-text-size-adjust:100%}
+body{
+  background:#0B0B09;color:#E8E5DC;
+  font-family:"PingFang SC","Hiragino Sans GB","Source Han Sans SC","Microsoft YaHei",system-ui,sans-serif;
+  font-feature-settings:"tnum" 1;-webkit-font-smoothing:antialiased;
+  padding:0 0 90px;
+}
+a{color:inherit;text-decoration:none}
+.back{position:fixed;top:22px;left:26px;z-index:50;font-size:12px;letter-spacing:.08em;color:#8C8A80;border:1px solid #2A2A24;padding:7px 12px;border-radius:2px;background:rgba(11,11,9,.7);backdrop-filter:blur(8px)}
+.back:hover{color:#E8E5DC;border-color:#4A4A40}
+
+.spec{max-width:1660px;margin:0 auto;padding:74px 56px 36px;display:grid;grid-template-columns:minmax(0,1fr) 400px;gap:60px;border-bottom:1px solid #1D1D18}
+.eyebrow{font-size:11px;letter-spacing:.28em;color:#7E7C72;margin-bottom:18px}
+.spec h1{font-size:82px;line-height:.9;letter-spacing:-.045em;font-weight:900}
+.spec h1 em{font-style:normal;color:#E63A12}
+.spec .lead{margin-top:22px;font-size:15px;line-height:1.85;color:#A9A69B;max-width:560px}
+.tags{display:flex;gap:8px;margin-top:26px;flex-wrap:wrap}
+.tags span{font-size:11px;letter-spacing:.06em;padding:5px 10px;border:1px solid #33332C;color:#B4B1A6;border-radius:2px}
+
+.tokens{border:1px solid #1D1D18;padding:26px;align-self:start;background:#0E0E0C}
+.tokens h3{font-size:11px;letter-spacing:.24em;color:#7E7C72;font-weight:600;margin-bottom:18px}
+.sw{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:24px}
+.sw div{font-size:10px;letter-spacing:.04em;color:#8C8A80}
+.sw i{display:block;height:44px;border:1px solid rgba(255,255,255,.14);margin-bottom:7px}
+.sw b{display:block;color:#D8D5CA;font-weight:600;font-size:11px;margin-bottom:2px}
+.dl{display:grid;grid-template-columns:78px 1fr;gap:9px 14px;font-size:12px;border-top:1px solid #1D1D18;padding-top:18px}
+.dl dt{color:#71706A;letter-spacing:.06em}
+.dl dd{color:#D8D5CA}
+
+/* ================= 手机外壳 ================= */
+.stage{max-width:1700px;margin:0 auto;padding:64px 56px 20px;display:flex;gap:44px;align-items:flex-start;overflow-x:auto;scroll-snap-type:x proximity}
+.col{flex:0 0 auto;scroll-snap-align:center}
+.col figcaption{display:flex;align-items:baseline;gap:10px;margin-bottom:16px;padding-left:8px}
+.col figcaption b{font-size:13px;letter-spacing:.02em;color:#E8E5DC;font-weight:600}
+.col figcaption span{font-size:11px;color:#6F6D64;letter-spacing:.06em}
+.phone{position:relative;width:390px;height:844px;border-radius:56px;padding:11px;
+  background:linear-gradient(150deg,#2C2C27,#111110 45%,#232320);
+  box-shadow:0 40px 80px -34px rgba(0,0,0,.95),0 0 0 1px #3A3A33,inset 0 0 0 1px rgba(255,255,255,.04)}
+.island{position:absolute;top:20px;left:50%;transform:translateX(-50%);width:112px;height:26px;border-radius:14px;background:#080807;z-index:40}
+.screen{position:relative;width:100%;height:100%;border-radius:46px;overflow:hidden;display:flex;flex-direction:column;background:#EDEAE1;color:#12120F}
+
+.sb{flex:0 0 auto;height:54px;display:flex;align-items:flex-end;justify-content:space-between;padding:0 30px 7px;font-size:13px;font-weight:700;letter-spacing:.01em;position:relative;z-index:20}
+.sb-r{display:flex;align-items:center;gap:5px}
+.sb-r svg{display:block}
+
+/* ================= A 端内样式 ================= */
+.screen.a{--paper:#EDEAE1;--paper2:#F7F5EF;--ink:#12120F;--ink2:#6E6C63;--red:#E63A12;--yellow:#FFD400}
+.a .ticker{flex:0 0 auto;background:var(--ink);color:var(--paper);font-size:10.5px;letter-spacing:.03em;height:28px;display:flex;align-items:center;gap:7px;padding:0 20px;font-weight:500}
+.a .ticker .dot{width:6px;height:6px;background:var(--red);border-radius:50%}
+.a .ticker .r{margin-left:auto;color:var(--yellow);letter-spacing:.06em}
+
+.a .uh{flex:0 0 auto;padding:16px 20px 0}
+.a .loc{font-size:11px;color:var(--ink2);display:flex;align-items:center;gap:5px;letter-spacing:.02em}
+.a .loc b{color:var(--ink);font-weight:700}
+.a .uh-row{display:flex;align-items:flex-end;justify-content:space-between;margin-top:9px}
+.a .uh h1{font-size:34px;font-weight:900;letter-spacing:-.05em;line-height:1}
+.a .uh h1 em{font-style:normal;color:var(--red)}
+.a .bag{position:relative;width:38px;height:38px;border:1.5px solid var(--ink);background:var(--paper2);border-radius:2px;display:grid;place-items:center;cursor:pointer}
+.a .bag .badge{position:absolute;top:-7px;right:-7px;min-width:18px;height:18px;background:var(--red);color:#fff;font-size:10px;font-weight:800;border-radius:9px;display:grid;place-items:center;padding:0 4px;border:1.5px solid var(--paper)}
+
+.a .search{flex:0 0 auto;margin:14px 20px 0;height:42px;border:1.5px solid var(--ink);background:var(--paper2);border-radius:2px;display:flex;align-items:center;gap:9px;padding:0 12px;font-size:12.5px;color:#8A877C}
+.a .search .kbd{margin-left:auto;font-size:9.5px;border:1px solid #C9C5B8;padding:2px 5px;color:#7A776C;letter-spacing:.04em}
+
+.a .cats{flex:0 0 auto;display:flex;gap:7px;padding:12px 20px 0;overflow:hidden}
+.a .cat{flex:0 0 auto;font-size:11.5px;font-weight:600;padding:7px 12px;border:1.5px solid var(--ink);border-radius:2px;background:var(--paper2);letter-spacing:.01em}
+.a .cat.on{background:var(--ink);color:var(--paper);font-weight:700}
+
+.a .promo{flex:0 0 auto;margin:14px 20px 0;background:var(--ink);color:var(--paper);padding:13px 14px;display:flex;align-items:center;gap:12px;border-radius:2px;position:relative;overflow:hidden}
+.a .promo::after{content:"";position:absolute;right:-26px;top:-26px;width:96px;height:96px;border-radius:50%;background:var(--red);opacity:.9}
+.a .promo .p-txt{position:relative;z-index:2}
+.a .promo .p-txt b{display:block;font-size:15px;font-weight:800;letter-spacing:-.01em}
+.a .promo .p-txt small{display:block;font-size:10px;color:#B9B6AB;margin-top:4px;letter-spacing:.04em}
+.a .promo .p-tag{margin-left:auto;position:relative;z-index:2;background:var(--yellow);color:var(--ink);font-size:10px;font-weight:800;padding:5px 8px;letter-spacing:.04em;border-radius:1px}
+
+.a .sec{flex:0 0 auto;display:flex;align-items:baseline;justify-content:space-between;padding:18px 20px 10px}
+.a .sec h2{font-size:15px;font-weight:800;letter-spacing:-.01em}
+.a .sec .more{font-size:10.5px;color:var(--ink2);letter-spacing:.02em}
+
+.a .goods{flex:1 1 auto;padding:0 20px;display:flex;flex-direction:column;gap:9px;overflow:hidden}
+.a .good{display:flex;align-items:center;gap:11px;background:var(--paper2);border:1.5px solid var(--ink);border-radius:2px;padding:9px;position:relative}
+.a .thumb{width:58px;height:58px;border:1.5px solid var(--ink);background:#fff;position:relative;display:grid;place-items:center;overflow:hidden;flex:0 0 auto}
+.a .thumb i{display:block;width:24px;height:24px;background:var(--red)}
+.a .t2 i{background:var(--yellow);border-radius:50%}
+.a .t3 i{background:var(--ink);clip-path:polygon(50% 0,100% 100%,0 100%)}
+.a .t4 i{background:repeating-linear-gradient(45deg,#1B4DFF 0 4px,#fff 4px 8px)}
+.a .g-name{font-size:13px;font-weight:700;letter-spacing:-.01em}
+.a .g-spec{font-size:10px;color:var(--ink2);margin-top:3px;letter-spacing:.02em}
+.a .g-price{margin-top:5px;display:flex;align-items:baseline;gap:3px}
+.a .g-price .cur{font-size:10px;font-weight:700}
+.a .g-price b{font-size:19px;font-weight:900;letter-spacing:-.03em;line-height:1}
+.a .g-price .g-tag{font-size:8.5px;font-weight:700;color:var(--red);border:1px solid var(--red);padding:1px 3px;margin-left:4px;letter-spacing:.02em}
+.a .g-add{position:absolute;right:9px;bottom:9px;width:26px;height:26px;border:1.5px solid var(--ink);background:var(--ink);color:var(--paper);border-radius:1px;font-size:16px;line-height:1;display:grid;place-items:center;cursor:pointer;font-weight:400}
+.a .g-add:active{transform:translateY(1px)}
+
+.a .tabbar{flex:0 0 auto;height:74px;border-top:1.5px solid var(--ink);background:var(--paper);display:grid;grid-template-columns:repeat(4,1fr);padding-top:9px;position:relative}
+.a .tab{display:flex;flex-direction:column;align-items:center;gap:4px;font-size:9.5px;letter-spacing:.04em;color:#8A877C;font-weight:600}
+.a .tab svg{width:21px;height:21px}
+.a .tab.on{color:var(--ink)}
+.a .tab.on::after{content:"";position:absolute;top:-1.5px;width:22px;height:3px;background:var(--red)}
+.a .homebar{position:absolute;bottom:8px;left:50%;transform:translateX(-50%);width:126px;height:4px;border-radius:2px;background:rgba(18,18,15,.55)}
+
+/* ---- 配送端 ---- */
+.a .dhead{flex:0 0 auto;background:var(--ink);color:var(--paper);padding:14px 20px 16px;display:flex;align-items:center;justify-content:space-between}
+.a .dhead .live{display:flex;align-items:center;gap:7px;font-size:12.5px;font-weight:700;letter-spacing:.02em}
+.a .dhead .live i{width:6px;height:6px;border-radius:50%;background:#3BE07E;box-shadow:0 0 0 3px rgba(59,224,126,.18)}
+.a .dhead .r{font-size:10px;color:#A5A299;letter-spacing:.08em}
+.a .dstats{flex:0 0 auto;display:grid;grid-template-columns:repeat(3,1fr);border-bottom:1.5px solid var(--ink);background:var(--paper2)}
+.a .dstats div{padding:13px 14px;border-right:1px solid rgba(18,18,15,.14)}
+.a .dstats div:last-child{border-right:0}
+.a .dstats b{display:block;font-size:22px;font-weight:900;letter-spacing:-.03em;line-height:1}
+.a .dstats b i{font-style:normal;font-size:11px;font-weight:700;margin-right:2px}
+.a .dstats span{display:block;font-size:9.5px;color:var(--ink2);margin-top:5px;letter-spacing:.06em}
+
+.a .order{flex:0 0 auto;margin:14px 20px 0;border:1.5px solid var(--ink);background:var(--paper2);border-radius:2px}
+.a .o-top{display:flex;align-items:center;gap:8px;padding:11px 12px;border-bottom:1.5px solid var(--ink)}
+.a .o-id{font-size:11px;font-weight:800;letter-spacing:.04em}
+.a .o-timer{margin-left:auto;font-size:19px;font-weight:900;letter-spacing:-.02em;line-height:1;font-variant-numeric:tabular-nums}
+.a .o-state{font-size:9px;font-weight:800;background:var(--ink);color:var(--paper);padding:3px 6px;letter-spacing:.06em;border-radius:1px}
+.a .route{padding:12px}
+.a .r-row{display:flex;align-items:flex-start;gap:9px}
+.a .pin{width:17px;height:17px;flex:0 0 auto;border:1.5px solid var(--ink);display:grid;place-items:center;font-size:9px;font-weight:800;background:var(--paper);border-radius:1px}
+.a .pin.drop{background:var(--red);color:#fff;border-color:var(--red)}
+.a .r-row b{font-size:12.5px;font-weight:700;display:block;line-height:1.2}
+.a .r-row small{font-size:10px;color:var(--ink2);display:block;margin-top:3px;letter-spacing:.02em}
+.a .r-line{height:14px;border-left:1.5px dashed #B9B5A7;margin:3px 0 3px 8px}
+.a .o-items{margin:0 12px;padding:9px 0;border-top:1px dashed #C6C2B4;font-size:10px;color:var(--ink2);letter-spacing:.01em}
+.a .o-actions{display:flex;gap:8px;padding:0 12px 12px}
+.a .btn{flex:1;height:40px;border:1.5px solid var(--ink);border-radius:2px;font-size:12.5px;font-weight:800;letter-spacing:.03em;cursor:pointer;background:var(--paper)}
+.a .btn.main{background:var(--ink);color:var(--paper)}
+.a .btn.ghost{flex:0 0 108px}
+
+.a .grab{flex:1 1 auto;margin:0 20px;overflow:hidden;display:flex;flex-direction:column;gap:8px}
+.a .grab-item{display:flex;align-items:center;gap:10px;border:1px solid rgba(18,18,15,.28);padding:9px 10px;border-radius:2px;background:rgba(247,245,239,.6)}
+.a .grab-item b{font-size:12px;font-weight:700}
+.a .grab-item small{display:block;font-size:9.5px;color:var(--ink2);margin-top:3px}
+.a .grab-item .amt{margin-left:auto;text-align:right}
+.a .grab-item .amt b{font-size:14px;font-weight:900}
+.a .grab-item .amt span{display:block;font-size:9px;color:var(--ink2);margin-top:2px}
+.a .tabbar.three{grid-template-columns:repeat(3,1fr)}
+
+/* ---- 管理端 ---- */
+.a .ahead{flex:0 0 auto;padding:12px 20px 14px;display:flex;align-items:flex-end;justify-content:space-between}
+.a .ahead .dt{font-size:10px;letter-spacing:.1em;color:var(--ink2)}
+.a .ahead h1{font-size:25px;font-weight:900;letter-spacing:-.04em;margin-top:5px}
+.a .chip{font-size:10px;font-weight:700;border:1.5px solid var(--ink);padding:6px 9px;border-radius:2px;background:var(--paper2);letter-spacing:.03em;display:flex;align-items:center;gap:5px}
+.a .kpis{flex:0 0 auto;display:grid;grid-template-columns:1fr 1fr;border-top:1.5px solid var(--ink);border-left:1.5px solid var(--ink);margin:0 20px}
+.a .kpi{border-right:1.5px solid var(--ink);border-bottom:1.5px solid var(--ink);padding:10px 11px;background:var(--paper2)}
+.a .kpi span{font-size:9px;letter-spacing:.1em;color:var(--ink2);display:flex;justify-content:space-between}
+.a .kpi span i{font-style:normal;color:var(--red);font-weight:800}
+.a .kpi b{display:block;font-size:24px;font-weight:900;letter-spacing:-.04em;line-height:1;margin-top:7px}
+.a .kpi b i{font-style:normal;font-size:11px;margin-right:2px;font-weight:700}
+.a .kpi em{font-style:normal;font-size:9px;color:var(--ink2);display:block;margin-top:5px;letter-spacing:.02em}
+
+.a .panel{flex:0 0 auto;margin:14px 20px 0;border:1.5px solid var(--ink);background:var(--paper2);padding:12px}
+.a .panel-h{display:flex;align-items:center;justify-content:space-between;margin-bottom:14px}
+.a .panel-h b{font-size:11px;letter-spacing:.08em;font-weight:800}
+.a .panel-h span{font-size:9.5px;color:var(--ink2)}
+.a .bars{display:flex;align-items:flex-end;gap:9px;height:88px}
+.a .bar{flex:1;display:flex;flex-direction:column;align-items:center;gap:6px;height:100%;justify-content:flex-end}
+.a .bar i{display:block;width:100%;background:var(--ink);border-radius:1px 1px 0 0;min-height:3px}
+.a .bar.now i{background:var(--red)}
+.a .bar u{font-size:8.5px;color:var(--ink2);text-decoration:none;letter-spacing:.02em}
+.a .bar.now u{color:var(--ink);font-weight:800}
+
+.a .alerts{flex:1 1 auto;margin:14px 20px 0;display:flex;flex-direction:column;gap:7px;overflow:hidden}
+.a .alert{display:flex;align-items:center;gap:9px;font-size:11px;padding:8px 10px;border-left:3px solid var(--red);background:rgba(230,58,18,.06)}
+.a .alert.warn{border-color:var(--ink);background:rgba(18,18,15,.05)}
+.a .alert b{font-weight:800}
+.a .alert span{margin-left:auto;font-size:9px;color:var(--ink2);letter-spacing:.02em}
+
+.foot{max-width:1660px;margin:0 auto;padding:26px 56px 0;display:flex;gap:26px;align-items:center;font-size:11px;color:#6F6D64;letter-spacing:.04em}
+.foot .line{flex:1;height:1px;background:#1D1D18}
+@media (max-width:900px){
+  .spec{grid-template-columns:1fr;padding:64px 22px 28px;gap:32px}
+  .spec h1{font-size:58px}
+  .stage{padding:36px 22px 10px}
+  .foot{padding:22px 22px 0}
+}
+@media (max-width:640px){
+  .stage{flex-direction:column;align-items:center;overflow:visible;padding:30px 0 10px;gap:38px}
+  .col figcaption{width:351px;margin:0 auto 16px;padding-left:0}
+  .phone{transform:scale(.9);transform-origin:top center;margin-bottom:-84px}
+  body>div:last-child>span:first-child{white-space:nowrap}
+}
+</style>
+</head>
+<body>
+<a class="back" href="../index.html">← 全部方向</a>
+
+<section class="spec">
+  <div>
+    <p class="eyebrow">STYLE 01 — 价签 / PRICE TAG</p>
+    <h1>价签<em>.</em></h1>
+    <p class="lead">把便利店货架上的印刷感直接搬进手机：厚黑描边、超市价签标签、硬阴影，价格永远是画面里最大的字。信息密度高，一眼看清买什么、多少钱、多久到。</p>
+    <div class="tags"><span>印刷硬边</span><span>高信息密度</span><span>价格优先</span><span>零圆角</span></div>
+  </div>
+  <aside class="tokens">
+    <h3>DESIGN TOKENS</h3>
+    <div class="sw">
+      <div><i style="background:#EDEAE1"></i><b>纸张</b>#EDEAE1</div>
+      <div><i style="background:#F7F5EF"></i><b>纸白</b>#F7F5EF</div>
+      <div><i style="background:#12120F"></i><b>油墨</b>#12120F</div>
+      <div><i style="background:#E63A12"></i><b>朱红</b>#E63A12</div>
+    </div>
+    <dl class="dl">
+      <dt>圆角</dt><dd>2px（几乎为直角）</dd>
+      <dt>描边</dt><dd>1.5px 实黑，无渐变</dd>
+      <dt>阴影</dt><dd>4px 4px 0 硬投影</dd>
+      <dt>字号</dt><dd>34 / 19 / 13 / 10</dd>
+      <dt>氛围</dt><dd>报纸 + 便利店 POP</dd>
+    </dl>
+  </aside>
+</section>
+
+<main class="stage">
+
+  <!-- 用户端 -->
+  <figure class="col">
+    <figcaption><b>用户端</b><span>首页 · 商品流</span></figcaption>
+    <div class="phone"><div class="island"></div><div class="screen a">
+
+      <div class="sb"><span>9:41</span><span class="sb-r">
+        <svg width="17" height="11" viewBox="0 0 17 11" fill="currentColor"><rect x="0" y="7" width="3" height="4"/><rect x="4.5" y="5" width="3" height="6"/><rect x="9" y="2.5" width="3" height="8.5"/><rect x="13.5" y="0" width="3" height="11"/></svg>
+        <svg width="15" height="11" viewBox="0 0 15 11" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M1 4a9 9 0 0 1 13 0M3.6 6.6a5.6 5.6 0 0 1 7.8 0"/><circle cx="7.5" cy="9.6" r="1" fill="currentColor" stroke="none"/></svg>
+        <svg width="24" height="11" viewBox="0 0 24 11" fill="none" stroke="currentColor" stroke-width="1.2"><rect x="0.6" y="0.6" width="19" height="9.8" rx="2.4"/><rect x="2.4" y="2.4" width="13.6" height="6.2" fill="currentColor"/><path d="M21.6 4v3" stroke-width="1.6"/></svg>
+      </span></div>
+
+      <div class="ticker"><span class="dot"></span>北苑仓 · 现在下单 30 分钟送达<span class="r">满 19 免配送</span></div>
+
+      <header class="uh">
+        <div class="loc">配送至 <b>北苑 3 号楼 508</b>
+          <svg width="9" height="6" viewBox="0 0 9 6" fill="none" stroke="currentColor" stroke-width="1.4"><path d="M1 1l3.5 3.4L8 1"/></svg>
+        </div>
+        <div class="uh-row">
+          <h1>想吃点啥<em>.</em></h1>
+          <button class="bag" aria-label="购物袋">
+            <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><path d="M4 8h16l-1.2 12H5.2L4 8z"/><path d="M8.5 8V6.2a3.5 3.5 0 0 1 7 0V8"/></svg>
+            <span class="badge">2</span>
+          </button>
+        </div>
+      </header>
+
+      <div class="search">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="10.5" cy="10.5" r="6.5"/><path d="M15.5 15.5L21 21"/></svg>
+        搜零食 / 冰饮 / 打印纸
+        <span class="kbd">搜索</span>
+      </div>
+
+      <div class="cats">
+        <span class="cat on">全部</span><span class="cat">冰饮</span><span class="cat">膨化</span><span class="cat">速食</span><span class="cat">文具</span>
+      </div>
+
+      <div class="promo">
+        <div class="p-txt"><b>22:00 后 满 19 减 5</b><small>夜宵时段 · 北苑仓直发</small></div>
+        <span class="p-tag">去凑单</span>
+      </div>
+
+      <div class="sec"><h2>宿舍常备</h2><span class="more">24 件在售 →</span></div>
+
+      <div class="goods">
+        <div class="good">
+          <div class="thumb t1"><i></i></div>
+          <div class="g-info">
+            <p class="g-name">脆浪 海盐薯片</p>
+            <p class="g-spec">68g / 袋 · 常温货架</p>
+            <p class="g-price"><span class="cur">¥</span><b>6.5</b><span class="g-tag">买二减一</span></p>
+          </div>
+          <button class="g-add" aria-label="加入购物袋">+</button>
+        </div>
+        <div class="good">
+          <div class="thumb t2"><i></i></div>
+          <div class="g-info">
+            <p class="g-name">冰屿 白桃气泡水</p>
+            <p class="g-spec">480ml / 瓶 · 冰柜</p>
+            <p class="g-price"><span class="cur">¥</span><b>4.0</b></p>
+          </div>
+          <button class="g-add">+</button>
+        </div>
+        <div class="good">
+          <div class="thumb t3"><i></i></div>
+          <div class="g-info">
+            <p class="g-name">夜猫 红烧牛肉面</p>
+            <p class="g-spec">桶装 112g · 送叉子</p>
+            <p class="g-price"><span class="cur">¥</span><b>5.5</b></p>
+          </div>
+          <button class="g-add">+</button>
+        </div>
+        <div class="good">
+          <div class="thumb t4"><i></i></div>
+          <div class="g-info">
+            <p class="g-name">一支 中性笔 0.5</p>
+            <p class="g-spec">黑色 / 3 支装 · 文具区</p>
+            <p class="g-price"><span class="cur">¥</span><b>2.0</b></p>
+          </div>
+          <button class="g-add">+</button>
+        </div>
+      </div>
+
+      <nav class="tabbar">
+        <a class="tab on"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M4 10.5L12 4l8 6.5V20H4z"/><path d="M9.6 20v-5.4h4.8V20"/></svg>首页</a>
+        <a class="tab"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="4" y="4" width="7" height="7"/><rect x="13" y="4" width="7" height="7"/><rect x="4" y="13" width="7" height="7"/><rect x="13" y="13" width="7" height="7"/></svg>分类</a>
+        <a class="tab"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M6 3h12v18l-6-4-6 4z"/></svg>订单</a>
+        <a class="tab"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="8.5" r="3.6"/><path d="M4.8 20c1-3.6 3.9-5.6 7.2-5.6s6.2 2 7.2 5.6"/></svg>我的</a>
+      </nav>
+      <div class="homebar"></div>
+    </div></div>
+  </figure>
+
+  <!-- 配送端 -->
+  <figure class="col">
+    <figcaption><b>配送端</b><span>执行中 · 当前订单</span></figcaption>
+    <div class="phone"><div class="island"></div><div class="screen a">
+
+      <div class="sb"><span>9:41</span><span class="sb-r">
+        <svg width="17" height="11" viewBox="0 0 17 11" fill="currentColor"><rect x="0" y="7" width="3" height="4"/><rect x="4.5" y="5" width="3" height="6"/><rect x="9" y="2.5" width="3" height="8.5"/><rect x="13.5" y="0" width="3" height="11"/></svg>
+        <svg width="15" height="11" viewBox="0 0 15 11" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M1 4a9 9 0 0 1 13 0M3.6 6.6a5.6 5.6 0 0 1 7.8 0"/><circle cx="7.5" cy="9.6" r="1" fill="currentColor" stroke="none"/></svg>
+        <svg width="24" height="11" viewBox="0 0 24 11" fill="none" stroke="currentColor" stroke-width="1.2"><rect x="0.6" y="0.6" width="19" height="9.8" rx="2.4"/><rect x="2.4" y="2.4" width="13.6" height="6.2" fill="currentColor"/><path d="M21.6 4v3" stroke-width="1.6"/></svg>
+      </span></div>
+
+      <div class="dhead">
+        <span class="live"><i></i>接单中</span>
+        <span class="r">北苑站 · 骑手 0231</span>
+      </div>
+
+      <div class="dstats">
+        <div><b><i>¥</i>86.4</b><span>今日收入</span></div>
+        <div><b>12</b><span>已送达</span></div>
+        <div><b>4.98</b><span>评分</span></div>
+      </div>
+
+      <div class="order">
+        <div class="o-top">
+          <span class="o-id">#A2381</span>
+          <span class="o-timer">14:22</span>
+          <span class="o-state">配送中</span>
+        </div>
+        <div class="route">
+          <div class="r-row"><span class="pin">取</span><div><b>北苑仓 A-12 货架</b><small>已取货 09:41 · 3 件商品</small></div></div>
+          <div class="r-line"></div>
+          <div class="r-row"><span class="pin drop">送</span><div><b>北苑 3 号楼 508</b><small>距你 2.1 km · 预计 09:56 送达</small></div></div>
+        </div>
+        <div class="o-items">脆浪薯片 ×2 · 冰屿气泡水 ×1 · 夜猫泡面 ×1</div>
+        <div class="o-actions">
+          <button class="btn main">确认送达</button>
+          <button class="btn ghost">联系买家</button>
+        </div>
+      </div>
+
+      <div class="sec"><h2>附近待抢 3 单</h2><span class="more">刷新 →</span></div>
+      <div class="grab">
+        <div class="grab-item">
+          <div><b>学苑 6 号楼 · 302</b><small>0.8 km · 4 件 · 12 分钟前</small></div>
+          <div class="amt"><b>¥7.5</b><span>配送费</span></div>
+        </div>
+        <div class="grab-item">
+          <div><b>图书馆东门 · 自提柜</b><small>1.3 km · 2 件 · 2 分钟前</small></div>
+          <div class="amt"><b>¥6.0</b><span>配送费</span></div>
+        </div>
+        <div class="grab-item">
+          <div><b>教师公寓 2 栋 · 1102</b><small>1.9 km · 6 件 · 4 分钟前</small></div>
+          <div class="amt"><b>¥9.0</b><span>配送费</span></div>
+        </div>
+      </div>
+
+      <nav class="tabbar three">
+        <a class="tab on"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M4 6h16M4 12h16M4 18h10"/></svg>任务</a>
+        <a class="tab"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="3" y="6" width="18" height="13" rx="1.5"/><path d="M3 10h18"/><circle cx="17" cy="15" r="1.4" fill="currentColor" stroke="none"/></svg>收入</a>
+        <a class="tab"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="8.5" r="3.6"/><path d="M4.8 20c1-3.6 3.9-5.6 7.2-5.6s6.2 2 7.2 5.6"/></svg>我的</a>
+      </nav>
+      <div class="homebar"></div>
+    </div></div>
+  </figure>
+
+  <!-- 管理端 -->
+  <figure class="col">
+    <figcaption><b>管理端</b><span>今日 · 实时看板</span></figcaption>
+    <div class="phone"><div class="island"></div><div class="screen a">
+
+      <div class="sb"><span>9:41</span><span class="sb-r">
+        <svg width="17" height="11" viewBox="0 0 17 11" fill="currentColor"><rect x="0" y="7" width="3" height="4"/><rect x="4.5" y="5" width="3" height="6"/><rect x="9" y="2.5" width="3" height="8.5"/><rect x="13.5" y="0" width="3" height="11"/></svg>
+        <svg width="15" height="11" viewBox="0 0 15 11" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M1 4a9 9 0 0 1 13 0M3.6 6.6a5.6 5.6 0 0 1 7.8 0"/><circle cx="7.5" cy="9.6" r="1" fill="currentColor" stroke="none"/></svg>
+        <svg width="24" height="11" viewBox="0 0 24 11" fill="none" stroke="currentColor" stroke-width="1.2"><rect x="0.6" y="0.6" width="19" height="9.8" rx="2.4"/><rect x="2.4" y="2.4" width="13.6" height="6.2" fill="currentColor"/><path d="M21.6 4v3" stroke-width="1.6"/></svg>
+      </span></div>
+
+      <header class="ahead">
+        <div>
+          <p class="dt">今日 · 11 月 18 日 周二</p>
+          <h1>北苑仓</h1>
+        </div>
+        <button class="chip">切换站点
+          <svg width="8" height="5" viewBox="0 0 9 6" fill="none" stroke="currentColor" stroke-width="1.4"><path d="M1 1l3.5 3.4L8 1"/></svg>
+        </button>
+      </header>
+
+      <div class="kpis">
+        <div class="kpi"><span>今日 GMV <i>+18%</i></span><b><i>¥</i>12,480</b><em>昨日同期 10,570</em></div>
+        <div class="kpi"><span>订单数 <i>+9%</i></span><b>386</b><em>待处理 12 单</em></div>
+        <div class="kpi"><span>客单价</span><b><i>¥</i>32.3</b><em>两件及以上 61%</em></div>
+        <div class="kpi"><span>履约率</span><b>98.2<i>%</i></b><em>超时 3 单</em></div>
+      </div>
+
+      <div class="panel">
+        <div class="panel-h"><b>近 7 日订单</b><span>单位：单</span></div>
+        <div class="bars">
+          <div class="bar"><i style="height:38%"></i><u>12</u></div>
+          <div class="bar"><i style="height:52%"></i><u>13</u></div>
+          <div class="bar"><i style="height:44%"></i><u>14</u></div>
+          <div class="bar"><i style="height:66%"></i><u>15</u></div>
+          <div class="bar"><i style="height:58%"></i><u>16</u></div>
+          <div class="bar"><i style="height:78%"></i><u>17</u></div>
+          <div class="bar now"><i style="height:92%"></i><u>18</u></div>
+        </div>
+      </div>
+
+      <div class="alerts">
+        <div class="alert"><b>库存告警</b> 冰屿 白桃气泡水 仅剩 6 件<span>补货</span></div>
+        <div class="alert"><b>超时订单</b> #A2377 已超 8 分钟未签收<span>查看</span></div>
+        <div class="alert warn"><b>退款申请</b> #A2364 少送一件，待审核<span>处理</span></div>
+        <div class="alert warn"><b>骑手提醒</b> 北苑站 2 人未上线<span>调度</span></div>
+      </div>
+
+      <nav class="tabbar">
+        <a class="tab on"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M4 20V10m6 10V5m6 15v-7"/></svg>看板</a>
+        <a class="tab"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="4" y="3.5" width="16" height="17"/><path d="M8 8h8M8 12h8M8 16h5"/></svg>订单</a>
+        <a class="tab"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M12 3l8 4.5v9L12 21l-8-4.5v-9z"/><path d="M4 7.5l8 4.5 8-4.5M12 12v9"/></svg>商品</a>
+        <a class="tab"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="8.5" r="3.6"/><path d="M4.8 20c1-3.6 3.9-5.6 7.2-5.6s6.2 2 7.2 5.6"/></svg>我的</a>
+      </nav>
+      <div class="homebar"></div>
+    </div></div>
+  </figure>
+
+</main>
+
+<div class="foot"><span>NO.01 价签</span><span class="line"></span><span>商户端沿用同一套价签组件：货架表格 + 库存数字。选定方向后四端全量落地。</span></div>
+<script>
+(function(){
+  document.querySelectorAll('nav a').forEach(function(el){
+    el.addEventListener('click', function(ev){
+      ev.preventDefault();
+      el.parentElement.querySelectorAll('a').forEach(function(s){ s.classList.remove('on'); });
+      el.classList.add('on');
+    });
+  });
+  document.querySelectorAll('.g-add, .plus, .add').forEach(function(b){
+    b.addEventListener('click', function(){
+      var badge = document.querySelector('.badge');
+      if (badge) badge.textContent = String(parseInt(badge.textContent || '0', 10) + 1);
+      b.animate([{ transform: 'scale(.86)' }, { transform: 'scale(1)' }], { duration: 160, easing: 'ease-out' });
+    });
+  });
+  document.querySelectorAll('button').forEach(function(b){
+    if (b.textContent.trim() === '确认送达') {
+      b.addEventListener('click', function(){
+        b.textContent = '已送达 · 待评价';
+        b.style.opacity = '.72';
+      });
+    }
+  });
+})();
+</script>
+</body>
+</html>

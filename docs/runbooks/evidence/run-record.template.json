@@ -1,0 +1,21 @@
+{
+  "template_only": true,
+  "run_id": null,
+  "case_ids": [],
+  "layer": null,
+  "allowed_layers": ["CONFIG", "LOCAL", "PREFLIGHT", "STAGING_FORMAL", "REMOTE_CI"],
+  "validation_kind": null,
+  "status": "NOT RUN",
+  "blockers": [],
+  "candidate": {"source_manifest_sha256": null, "commit_or_candidate_id": null, "wiring_manifest_sha256": null, "artifact_id": null, "artifact_sha256": null, "migration_manifest_sha256": null, "sbom_sha256": null},
+  "environment": {"id": null, "topology_record": null, "config_version_id": null, "switches": {"cod": null, "balance": null, "orders": null, "dispatch": null}, "database_instance_id": null, "schema_id": null, "authorization_id": null, "approval_window": null},
+  "operation": {"cwd": null, "command_or_manual_steps_redacted": null, "tool_versions": [], "vulnerability_database_timestamp": null},
+  "time": {"started_at": null, "finished_at": null, "display_timezone": "Asia/Shanghai", "clock_source": null},
+  "result": {"exit_code": null, "matched": null, "passed": null, "failed": null, "skipped": null, "required_skipped": null, "expected": null, "actual": null},
+  "evidence": [{"location": null, "sha256": null, "access_class": null}],
+  "owner_name": null,
+  "reviewer_name": null,
+  "first_failure_run_id": null,
+  "diagnosis": {"status": null, "root_cause": null, "limitations": null},
+  "next_action": {"condition": null, "owner_name_or_role": null, "due_at": null}
+}

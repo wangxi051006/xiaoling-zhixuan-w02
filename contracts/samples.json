@@ -1,0 +1,53 @@
+{
+  "classification": "SYNTHETIC_ONLY",
+  "description": "合成契约样本，不含真实身份、电话、地址、会话或资金凭据，不连接业务接口。金额仅用于格式验证。",
+  "samples": [
+    {
+      "name": "scheduled-quote-input",
+      "schema": "QuoteInput",
+      "value": {
+        "lines": [{ "sku_id": "synthetic-sku-001", "qty": 2 }],
+        "address_id": "synthetic-address-001",
+        "delivery_mode": "SCHEDULED",
+        "slot_id": "synthetic-slot-001",
+        "payment_method": "COD"
+      }
+    },
+    {
+      "name": "asap-quote-input",
+      "schema": "QuoteInput",
+      "value": {
+        "lines": [{ "sku_id": "synthetic-sku-001", "qty": 1 }],
+        "address_id": "synthetic-address-001",
+        "delivery_mode": "ASAP",
+        "payment_method": "COD"
+      }
+    },
+    {
+      "name": "order-input-no-client-amount",
+      "schema": "OrderInput",
+      "value": { "quote_id": "synthetic-quote-001", "note": "合成订单格式样本" }
+    },
+    {
+      "name": "slot-conflict",
+      "schema": "ApiError",
+      "value": { "code": "SLOT_FULL", "message": "该时段已满", "request_id": "synthetic-request-001" }
+    },
+    {
+      "name": "cod-only-payment-options",
+      "schema": "PaymentMethods",
+      "value": {
+        "methods": [
+          { "code": "COD", "enabled": true, "label": "货到付款" },
+          { "code": "BALANCE", "enabled": false, "label": "余额暂未开放" },
+          { "code": "WECHAT", "enabled": false, "label": "待接入" }
+        ]
+      }
+    },
+    {
+      "name": "empty-orders",
+      "schema": "OrderList",
+      "value": { "items": [], "next_cursor": null }
+    }
+  ]
+}

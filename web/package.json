@@ -1,0 +1,26 @@
+{
+  "name": "xiaoling-web",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "preview": "vite preview",
+    "typecheck": "tsc --noEmit",
+    "test": "node --test tests/api.test.mjs tests/cod-difference.test.mjs",
+    "contract": "node ../contracts/generate.mjs --check",
+    "build": "npm run contract && vite build",
+    "test:e2e": "node --test tests/entries.e2e.mjs tests/identity.e2e.mjs",
+    "test:e2e:p08": "node --test --test-reporter=tap tests/p08-cod-discrepancy.e2e.mjs"
+  },
+  "engines": {
+    "node": ">=22.18.0"
+  },
+  "dependencies": {
+    "vue": "3.5.45"
+  },
+  "devDependencies": {
+    "playwright-core": "1.65.1",
+    "typescript": "5.9.3",
+    "vite": "7.3.8"
+  }
+}

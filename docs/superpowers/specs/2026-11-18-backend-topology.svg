@@ -1,0 +1,128 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1380" height="1014" viewBox="0 0 1380 1014" role="img" aria-labelledby="title description">
+  <title id="title">校零智选 · 首版后端实现拓扑</title>
+  <desc id="description">用户和骑手从独立公网入口访问，管理员经受控网络访问。Caddy 将 API 转至 Go。Go 管理即时、预约、货到付款与内部余额，连接私网 PostgreSQL、短信服务、员工身份服务及独立日志；首版不接微信支付。</desc>
+  <defs>
+    <marker id="arrow" markerWidth="9" markerHeight="9" refX="7.5" refY="4.5" orient="auto" markerUnits="userSpaceOnUse">
+      <path d="M0 0 L8 4.5 L0 9 Z" fill="#4d6472"/>
+    </marker>
+    <marker id="external-arrow" markerWidth="9" markerHeight="9" refX="7.5" refY="4.5" orient="auto" markerUnits="userSpaceOnUse">
+      <path d="M0 0 L8 4.5 L0 9 Z" fill="#aa552d"/>
+    </marker>
+    <marker id="audit-arrow" markerWidth="9" markerHeight="9" refX="7.5" refY="4.5" orient="auto" markerUnits="userSpaceOnUse">
+      <path d="M0 0 L8 4.5 L0 9 Z" fill="#32776b"/>
+    </marker>
+    <style>
+      text { font-family: "Microsoft YaHei UI", "Microsoft YaHei", "Noto Sans CJK SC", "PingFang SC", sans-serif; fill: #173342; }
+      .mono { font-family: Consolas, "Microsoft YaHei UI", "Noto Sans CJK SC", monospace; }
+      .kicker { font-size: 13px; font-weight: 700; fill: #356557; }
+      .hero { font-size: 36px; font-weight: 700; }
+      .sub { font-size: 16px; fill: #4b626f; }
+      .zone { font-size: 15px; font-weight: 700; fill: #356557; }
+      .title { font-size: 21px; font-weight: 700; }
+      .label { font-size: 15px; fill: #405b68; }
+      .small { font-size: 13px; fill: #4b626f; }
+      .external { fill: #914321; }
+      .strong { font-weight: 700; }
+      .flow, .peer, .audit { stroke-width: 2; fill: none; stroke-linecap: round; stroke-linejoin: round; }
+      .flow { stroke: #4d6472; marker-end: url(#arrow); }
+      .peer { stroke: #aa552d; marker-end: url(#external-arrow); }
+      .audit { stroke: #32776b; stroke-dasharray: 5 5; marker-end: url(#audit-arrow); }
+    </style>
+  </defs>
+
+  <rect width="1380" height="1014" fill="#fbfaf6"/>
+  <rect x="48" y="28" width="4" height="81" rx="2" fill="#3d8373"/>
+  <text class="kicker" x="66" y="34">校零智选 / 后端架构</text>
+  <text class="hero" x="66" y="83">首版实现拓扑</text>
+  <text class="sub" x="66" y="109">单校单站 · 即时与预约 · 货到付款 / 余额 · Go 首发</text>
+  <rect x="1117" y="41" width="215" height="41" rx="7" fill="#edf3ef" stroke="#cbdcd3"/>
+  <text class="kicker" x="1224.5" y="67" text-anchor="middle">实施基准 v1.0 · 2026-11-18</text>
+
+  <g aria-label="客户端与入口">
+    <rect x="48" y="134" width="1284" height="210" rx="12" fill="#f2f6f5" stroke="#c9dbd5"/>
+    <text class="zone" x="72" y="162">01 / 客户端与入口</text>
+    <text class="small" x="1308" y="161" text-anchor="end">保留「03 手账」自绘 UI · Vue + TypeScript + Vite</text>
+    <rect x="72" y="179" width="374" height="94" rx="8" fill="#ffffff" stroke="#cfdbdf"/>
+    <rect x="503" y="179" width="374" height="94" rx="8" fill="#ffffff" stroke="#cfdbdf"/>
+    <rect x="934" y="179" width="374" height="94" rx="8" fill="#ffffff" stroke="#cfdbdf"/>
+    <text class="title" x="92" y="211">用户端</text>
+    <text class="label" x="92" y="237">选购 · 支付 · 订单</text>
+    <text class="small" x="92" y="258">公网用户域名 · 移动 Web</text>
+    <text class="title" x="523" y="211">配送端</text>
+    <text class="label" x="523" y="237">抢单 · 取货 · 送达</text>
+    <text class="small" x="523" y="258">公网骑手域名 · 移动 Web</text>
+    <text class="title" x="954" y="211">管理端</text>
+    <text class="label" x="954" y="237">商品库存 · 放单 · 退款审批</text>
+    <text class="small" x="954" y="258">独立管理域名 · 不开放公网直达</text>
+    <rect x="980" y="294" width="282" height="34" rx="6" fill="#dfede7" stroke="#b9d2c5"/>
+    <text class="small strong" x="1121" y="316" text-anchor="middle">VPN / 受控访问网关</text>
+    <path class="flow" d="M1121 273 V293"/>
+  </g>
+
+  <g aria-label="单台 Linux 应用主机">
+    <rect x="48" y="374" width="928" height="362" rx="12" fill="#ecf3f5" stroke="#c6d8de"/>
+    <text class="zone" x="72" y="401">02 / 单台 Linux 应用主机</text>
+    <text class="small" x="661" y="400" text-anchor="end">公网仅开放 HTTPS；HTTP 按需跳转 / 证书挑战</text>
+    <rect x="72" y="425" width="880" height="84" rx="8" fill="#fff" stroke="#b8cbd3"/>
+    <text class="title" x="93" y="457">Caddy · 统一入口</text>
+    <text class="label" x="93" y="484">TLS / 域名路由 / 静态文件 / API 反向代理</text>
+    <text class="small" x="930" y="455" text-anchor="end">隔离用户、配送、管理入口</text>
+    <text class="small" x="930" y="483" text-anchor="end">首版无第三方支付回调</text>
+
+    <rect x="72" y="560" width="880" height="151" rx="8" fill="#fff" stroke="#a9c9bf"/>
+    <rect x="72" y="560" width="5" height="151" rx="2.5" fill="#3d8373"/>
+    <text class="title" x="93" y="595">Go 模块化单体</text>
+    <text class="small strong" x="930" y="592" text-anchor="end">回环监听 · 一套业务运行时</text>
+    <path d="M93 608 H930" stroke="#dae6e3"/>
+    <text class="label" x="93" y="634">身份 · 目录与库存 · 时段容量 · 订单与履约 · COD 收款 / 余额账本 · 审计</text>
+    <text class="small" x="93" y="664">REST /api/v1 · 权限校验 · 预约/即时同池 · 微信支付仅显示「待接入」</text>
+    <text class="small" x="93" y="688">同进程后台任务：预约唤醒 / 逾期提醒 / 异常检查；由 PostgreSQL 承载持久重试</text>
+    <path class="flow" d="M512 509 V559"/>
+    <text class="small mono" x="527" y="541">loopback · /api/v1</text>
+  </g>
+
+  <g aria-label="外部身份依赖">
+    <rect x="1013" y="374" width="319" height="362" rx="12" fill="#fcf1e8" stroke="#e4cdbb"/>
+    <text class="zone external" x="1037" y="401">03 / 外部依赖</text>
+    <rect x="1037" y="425" width="271" height="149" rx="8" fill="#fffaf5" stroke="#dfc2ac"/>
+    <text class="title" x="1057" y="456">短信供应商</text>
+    <text class="label" x="1057" y="484">用户手机号登录验证</text>
+    <text class="small external" x="1057" y="512">Go → 短信：受限调用</text>
+    <text class="small external" x="1057" y="542">不在日志记录 OTP 或完整手机号</text>
+    <rect x="1037" y="616" width="271" height="95" rx="8" fill="#fffaf5" stroke="#dfc2ac"/>
+    <text class="title" x="1057" y="650">员工身份服务</text>
+    <text class="label" x="1057" y="678">OIDC + MFA · 骑手与管理身份</text>
+    <path class="peer" d="M952 578 H995 V544 H1036"/>
+    <path class="peer" d="M952 665 H1036"/>
+  </g>
+
+  <g aria-label="数据与运维边界">
+    <rect x="48" y="782" width="1284" height="163" rx="12" fill="#f2f6f5" stroke="#c9dbd5"/>
+    <text class="zone" x="72" y="809">04 / 数据与运维边界</text>
+    <text class="small" x="1308" y="809" text-anchor="end">不向公网暴露数据库、健康检查和运维端口</text>
+    <rect x="72" y="824" width="582" height="98" rx="8" fill="#fff" stroke="#c3d8d0"/>
+    <rect x="680" y="824" width="628" height="98" rx="8" fill="#fff" stroke="#c3d8d0"/>
+    <text class="title" x="92" y="857">托管 PostgreSQL</text>
+    <text class="label" x="92" y="885">主库：时段、订单、库存、配送、余额与对账</text>
+    <text class="small" x="92" y="907">私网端点 · 加密备份 · 时间点恢复（PITR）</text>
+    <text class="title" x="700" y="857">独立运维与审计</text>
+    <text class="label" x="700" y="885">受控日志与审计副本 · 指标 / 告警</text>
+    <text class="small" x="700" y="907">独立权限 · 敏感数据最小化 · 发布前验证恢复和告警</text>
+    <path class="flow" d="M331 711 V823"/>
+    <text class="small" x="347" y="763">VPC 私网 / SQL</text>
+    <path class="audit" d="M796 711 V823"/>
+    <text class="small" x="812" y="763">日志 / 指标</text>
+  </g>
+
+  <path class="flow" d="M259 273 V381 H307 V424"/>
+  <path class="flow" d="M690 273 V424"/>
+  <path class="flow" d="M1121 328 V357 H988 V414 H894 V424"/>
+  <rect x="270" y="351" width="105" height="20" rx="3" fill="#fbfaf6"/>
+  <rect x="701" y="351" width="105" height="20" rx="3" fill="#fbfaf6"/>
+  <text class="small" x="277" y="366">HTTPS / 同源</text>
+  <text class="small" x="708" y="366">HTTPS / 同源</text>
+
+  <path d="M48 963 H1332" stroke="#dddeda"/>
+  <text class="small" x="48" y="988">箭头表示请求或数据发起方向，省略响应。橙色为第三方调用，虚线为运维数据。</text>
+  <text class="small strong" x="1332" y="988" text-anchor="end">Rust 不在首发部署范围，保留异步计算扩展</text>
+</svg>

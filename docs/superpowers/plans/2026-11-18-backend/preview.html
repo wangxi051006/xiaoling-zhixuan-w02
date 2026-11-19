@@ -1,0 +1,104 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>校零智选 · 后端实施工作台</title>
+  <style>
+    :root{color-scheme:light;--paper:#fafbf8;--white:#fff;--ink:#17342d;--muted:#4e635a;--rule:#cbd8cf;--soft:#edf3ee;--green:#155543;--rust:#8b3c22;--warm:#fbf0e6;--serif:"Songti SC","SimSun",Georgia,serif;--mono:Consolas,monospace}
+    *{box-sizing:border-box}body{margin:0;background:var(--paper);color:var(--ink);font:15px/1.58 "Microsoft YaHei UI","PingFang SC",sans-serif}a{color:var(--green);text-underline-offset:4px}a:hover{color:var(--rust)}:focus-visible{outline:2px solid var(--rust);outline-offset:3px}.wrap{width:min(1260px,100% - 64px);margin-inline:auto}
+    header{border-top:5px solid var(--green);border-bottom:1px solid var(--rule);background:var(--white)}.brandbar{display:flex;justify-content:space-between;gap:14px;align-items:center;padding:13px 0;border-bottom:1px solid var(--rule)}.brand{font-weight:800}.version{font:13px var(--mono);color:var(--muted)}
+    .heading{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:14px;align-items:end;padding:22px 0}.heading p{margin:5px 0 0;color:var(--muted)}h1,h2,h3,p{margin:0}h1{font:700 38px/1.15 var(--serif)}h2{font:700 25px/1.25 var(--serif)}h3{font-size:15px}.button,button{display:inline-flex;align-items:center;justify-content:center;gap:7px;padding:9px 13px;min-height:42px;border:1px solid var(--green);border-radius:5px;background:var(--green);color:white;font:inherit;text-decoration:none;cursor:pointer}.button:hover,button:hover{background:#1c6753;color:white}.secondary{background:var(--white);color:var(--green)}.secondary:hover{background:var(--soft);color:var(--ink)}.actions{display:flex;flex-wrap:wrap;gap:8px}
+    .facts{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));border-top:1px solid var(--rule)}.fact{padding:13px 12px 15px 0;min-width:0}.fact+.fact{border-left:1px solid var(--rule);padding-left:17px}.fact b{display:block}.fact span{color:var(--muted);font-size:13px}
+    nav{display:flex;flex-wrap:wrap;gap:9px 24px;padding:12px 0;border-bottom:1px solid var(--rule);font-size:14px}nav a{text-decoration:none}main{padding-bottom:28px}.overview{display:grid;grid-template-columns:minmax(0,1.04fr) minmax(0,1fr);gap:30px;align-items:start}.section{padding:23px 0;border-bottom:1px solid var(--rule);scroll-margin-top:8px}.section-head{display:flex;gap:12px 16px;justify-content:space-between;align-items:baseline;flex-wrap:wrap;margin-bottom:13px}.index{font:700 12px var(--mono);color:var(--rust);margin-right:7px}.aside{font-size:13px;color:var(--muted)}
+    .waves{margin:0;padding:0;list-style:none;border-top:1px solid var(--rule)}.waves li{display:grid;grid-template-columns:50px minmax(0,1fr);gap:12px;padding:9px 0;border-bottom:1px solid var(--rule)}.waves h3{margin:0}.waves p{font-size:13px;color:var(--muted)}.waves span{font:700 13px/1.7 var(--mono);color:var(--green)}.callout{background:var(--warm);border-left:3px solid var(--rust);padding:9px 13px;margin-top:12px;color:#663720;font-size:13px}
+    figure{margin:0}.topology{display:block;background:white;border:1px solid var(--rule);padding:4px;border-radius:5px}.topology img{display:block;width:100%;height:auto}.topology:hover{border-color:var(--green)}figcaption{margin-top:7px;font-size:13px;color:var(--muted)}
+    .packages{margin:0;padding:0;list-style:none;border-top:1px solid var(--rule)}.packages li{display:grid;grid-template-columns:54px minmax(0,1.04fr) minmax(0,1.4fr) auto;gap:12px;align-items:center;padding:10px 0;border-bottom:1px solid var(--rule)}.id{font:700 13px var(--mono);color:var(--green)}.packages strong{font-size:15px}.packages small{color:var(--muted);font-size:13px}.open{white-space:nowrap}
+    .prompt-tools{display:flex;gap:9px;align-items:center;flex-wrap:wrap;margin-bottom:9px}.prompt-tools label{font-weight:700}select{background:var(--white);color:var(--ink);border:1px solid #839a8d;border-radius:5px;min-height:42px;font:inherit;padding:7px 10px;max-width:100%}textarea{display:block;width:100%;resize:vertical;min-height:180px;max-height:65vh;padding:12px;background:var(--white);color:var(--ink);font:14px/1.65 var(--mono),"Microsoft YaHei UI",monospace;border:1px solid #839a8d;border-radius:5px;overflow-wrap:anywhere}.status{display:block;min-height:24px;margin-top:6px;color:var(--green);font-size:13px}
+    .gates{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:17px}.gates p{margin-top:3px;color:var(--muted);font-size:13px}.gate{border-top:2px solid var(--green);padding-top:8px}.gate:last-child{border-color:var(--rust)}footer{padding:13px 0;color:var(--muted);font-size:13px}
+    @media(max-width:840px){.overview{grid-template-columns:1fr;gap:0}.heading{grid-template-columns:1fr}.wrap{width:min(100% - 38px,1260px)}}
+    @media(max-width:540px){.wrap{width:calc(100% - 28px)}.brandbar{flex-wrap:wrap}.heading{padding:17px 0}h1{font-size:30px}.facts,.gates{grid-template-columns:1fr;gap:0}.fact{padding:7px 0}.fact+.fact{border-left:0;border-top:1px solid var(--rule);padding-left:0}.packages li{grid-template-columns:43px minmax(0,1fr) auto;gap:3px 7px}.packages small{grid-column:2/-1;grid-row:2}.open{grid-column:3;grid-row:1}.prompt-tools label{width:100%}textarea{min-height:225px}.gate{margin-top:9px}.waves li{gap:7px}}
+    @media print{nav,.actions,button{display:none}body{background:white}.wrap{width:100%}.section{break-inside:avoid}}
+  </style>
+</head>
+<body>
+<header><div class="wrap">
+  <div class="brandbar"><div class="brand">校零智选　/　工程文档</div><span class="version">V1.0 · 2026-11-18 · 未开始实施</span></div>
+  <div class="heading"><div><h1>后端实施工作台</h1><p>从工程基线到安全验收。首版一个 Go 应用，保留三端自绘界面。</p></div><div class="actions"><a class="button" href="00-master.md">实施总计划 <span aria-hidden="true">↗</span></a><a class="button secondary" href="08-acceptance.md">验收计划 <span aria-hidden="true">↗</span></a></div></div>
+  <div class="facts">
+    <div class="fact"><b>单校单站 · 即时 + 预约</b><span>同一库存、同一时段容量池</span></div>
+    <div class="fact"><b>货到付款优先 · 余额单独放行</b><span>微信待接入，不开支付或回调接口</span></div>
+    <div class="fact"><b>Go + 私网 PostgreSQL</b><span>Rust 依据压测选用，不随首发部署</span></div>
+  </div>
+</div></header>
+<main class="wrap">
+  <nav aria-label="本页目录"><a href="#sequence">开工顺序</a><a href="#topology">实现拓扑</a><a href="#packages">实施分包</a><a href="#prompts">分段提示词</a><a href="#gates">验收门禁</a></nav>
+  <div class="overview">
+    <section class="section" id="sequence" aria-labelledby="sequence-heading">
+      <div class="section-head"><h2 id="sequence-heading"><span class="index">01</span>开工顺序</h2><a class="aside" href="10-contracts.md">冻结契约 ↗</a></div>
+      <ol class="waves">
+        <li><span>W0</span><div><h3>总控完成 P00，签 G0</h3><p>锁定迁移、API、测试和工作区基线。</p></div></li>
+        <li><span>W1</span><div><h3>P01–P04、P06、P07 可并行</h3><p>域包独立开发；前端走契约 mock，部署包先搭环境。</p></div></li>
+        <li><span>W2</span><div><h3>G1 合并域包，P05 接交易</h3><p>G2 验事务和并发；G3 真联调，G4 预发演练。</p></div></li>
+        <li><span>G5</span><div><h3>P08 独立签发上线</h3><p>COD 与余额分别判定；越权或对账失败则阻断。</p></div></li>
+      </ol>
+      <p class="callout">当前工作区未初始化 Git。开多窗口前先确定经审核的仓库基线与独立分支，或使用独立副本，不共写一份目录。</p>
+    </section>
+    <section class="section" id="topology" aria-labelledby="topology-heading">
+      <div class="section-head"><h2 id="topology-heading"><span class="index">02</span>实现拓扑</h2><a class="aside" href="../../specs/2026-11-18-backend-design.md">架构设计 ↗</a></div>
+      <figure><a class="topology" href="../../specs/2026-11-18-backend-topology.svg"><img src="../../specs/2026-11-18-backend-topology.svg" width="1380" height="1014" alt="三端经 Caddy 访问 Go 单体；PostgreSQL 与审计存储均不直接对公网开放"></a><figcaption>打开原图查看端口、身份、数据及运维边界。</figcaption></figure>
+    </section>
+  </div>
+  <section class="section" id="packages" aria-labelledby="packages-heading">
+    <div class="section-head"><h2 id="packages-heading"><span class="index">03</span>实施分包</h2><span class="aside">依赖、写域与证据要求见对应文档</span></div>
+    <ul class="packages">
+      <li><span class="id">P00</span><strong>工程基线与公共契约</strong><small>先行 · 冻结 API、迁移和脚手架</small><a class="open" href="01-foundation.md">打开 ↗</a></li>
+      <li><span class="id">P01</span><strong>身份、权限与地址</strong><small>G0 后 · OTP / OIDC / 三端授权</small><a class="open" href="02-platform.md">打开 ↗</a></li>
+      <li><span class="id">P02</span><strong>商品、定价与库存</strong><small>G0 后 · 报价、库存预占和退回</small><a class="open" href="03-catalog-stock.md">打开 ↗</a></li>
+      <li><span class="id">P03</span><strong>即时与预约容量</strong><small>G0 后 · 营业窗口、原子占用</small><a class="open" href="04-slots.md">打开 ↗</a></li>
+      <li><span class="id">P04</span><strong>收款、余额与对账</strong><small>G0 后 · 现金上缴、余额扣退</small><a class="open" href="05-settlement.md">打开 ↗</a></li>
+      <li><span class="id">P05</span><strong>交易与履约</strong><small>G1 后 · 跨域事务、取送和异常退回</small><a class="open" href="06-order-delivery.md">打开 ↗</a></li>
+      <li><span class="id">P06</span><strong>三端 UI</strong><small>G0 后契约 mock，G2 后真实联调</small><a class="open" href="07-web.md">打开 ↗</a></li>
+      <li><span class="id">P07</span><strong>部署与运行</strong><small>G0 后搭环境，G2/G3 后预发演练</small><a class="open" href="09-deploy.md">打开 ↗</a></li>
+      <li><span class="id">P08</span><strong>验收与安全审计</strong><small>独立复核 · 分渠道出具 GO / NO-GO</small><a class="open" href="08-acceptance.md">打开 ↗</a></li>
+    </ul>
+  </section>
+  <section class="section" id="prompts" aria-labelledby="prompts-heading">
+    <div class="section-head"><h2 id="prompts-heading"><span class="index">04</span>分段提示词</h2><a class="aside" href="00-master.md">查看总文档中的完整提示词 ↗</a></div>
+    <div class="prompt-tools"><label for="prompt-select">实施包</label><select id="prompt-select"></select><button type="button" id="copy-prompt"><span aria-hidden="true">⧉</span>复制提示词</button></div>
+    <textarea id="prompt-text" aria-label="所选实施包提示词" readonly></textarea><span id="copy-status" class="status" role="status" aria-live="polite"></span>
+    <noscript><p>本页复制控件需要 JavaScript；全部提示词仍可在<a href="00-master.md">实施总计划</a>里查看。</p></noscript>
+  </section>
+  <section class="section" id="gates" aria-labelledby="gates-heading">
+    <div class="section-head"><h2 id="gates-heading"><span class="index">05</span>验收门禁</h2><a class="aside" href="08-acceptance.md">用例矩阵与签字要求 ↗</a></div>
+    <div class="gates"><div class="gate"><h3>货到付款</h3><p>收款、送达、拒付退回、上缴差异与线下退款实测。</p></div><div class="gate"><h3>余额支付</h3><p>扣退与对账测试通过之外，另验余额来源及导入审批。生产默认关闭。</p></div><div class="gate"><h3>独立安全审计</h3><p>越权、泄露、资金不一致或恢复失败，不允许上线。</p></div></div>
+  </section>
+  <footer>规划资料 · 保留现有演示 · 不代表已写入生产功能或通过验收</footer>
+</main>
+<script type="application/json" id="prompt-data">[{"id":"P00","title":"总控与脚手架","prompt":"你是校零智选总控，执行 P00。工作区为校零智选根。先读 docs/superpowers/plans/2026-11-18-backend/00-master.md、01-foundation.md、10-contracts.md 和链接的现有架构；原型只读。确认是否有授权 Git 基线，没有只报告并保留安全工作方式，不私自推送。用 Go+pgx 和 Vue/TS/Vite 建最小可执行骨架，冻结 OpenAPI、共享交易端口、迁移编号、测试脚本与脱敏样本；不实现域逻辑，不集成微信/部署线上。共享路径只有你负责。输出 G0 清单、基线提交/补丁、执行的命令和结果、未完成项。G0 未绿不得派 W1。"},{"id":"P01","title":"身份与地址","prompt":"执行校零智选 P01，读取 docs/superpowers/plans/2026-11-18-backend/{00-master,02-platform,10-contracts,08-acceptance}.md；G0 未放行则停止写入。只写 backend/internal/identity/ 和迁移 010 段。实现客户手机号 OTP、员工 OIDC/MFA 映射、会话、站点权限和地址簿，落实权限/失效/CSRF/脱敏测试。OTP 和 IdP 只用隔离测试适配器，不把假登录放进生产，不碰订单/支付或共享配置。按总计划格式报告 P01 分支、改动、测试、证据及阻塞项。"},{"id":"P02","title":"商品、定价及库存","prompt":"执行校零智选 P02，读 docs/superpowers/plans/2026-11-18-backend/{00-master,03-catalog-stock,10-contracts,08-acceptance}.md，等待 G0。只写 backend/internal/catalog/ 和迁移 020 段。测试先行实现规格换算、阶梯促销整数分报价、上架/版本、库存预占/消费/释放/退回/调整，函数沿用调用方传入的 pgx.Tx。重点用真实 PG 验证抢最后一份、取消和取货冲突、三件装和重试。别重算订单金额或修改公共接口；提出变更交总控。报告分支、路径、测试和证据。"},{"id":"P03","title":"预约与即时容量","prompt":"执行校零智选 P03，读 docs/superpowers/plans/2026-11-18-backend/{00-master,04-slots,10-contracts,08-acceptance}.md，等待 G0。只写 backend/internal/schedule/ 和迁移 030 段。实现 Asia/Shanghai 营业窗口、即时选择与预约时段、共享容量原子预占/释放，注入时钟；用真实 PG 验证边界、跨天与并发最后一席。不实现订单状态和后台唤醒，只给订单包确定的时间/容量接口。报告分支、路径、测试和证据。"},{"id":"P04","title":"COD、余额与对账","prompt":"执行校零智选 P04，读 docs/superpowers/plans/2026-11-18-backend/{00-master,05-settlement,10-contracts,08-acceptance}.md，等待 G0。只写 backend/internal/settlement/、backend/cmd/balance-import/ 和迁移 040 段。测试先行实现 COD 应收、收款、批次上缴/复点和线下退款记录；余额用受控批次导入、整数分账本、原子扣退和唯一键。只用合成资金数据和隔离 PG；余额新单生产默认关闭，退款保持，禁止充值、提现、转账、伪造上缴、微信回调。消费者传同一 pgx.Tx，不能另开事务。报告分支、路径、测试、对账证据和运营放行项。"},{"id":"P05","title":"订单和配送联接","prompt":"执行校零智选 P05，读 docs/superpowers/plans/2026-11-18-backend/{00-master,06-order-delivery,10-contracts,08-acceptance}.md，G1 后开工。只写 backend/internal/fulfillment/、迁移 050 段和 backend/test/integration/。按规则实现报价、提交共用事务、预约唤醒、取消/归架、备货与放单/抢单/取送/退回、催单消息和收入；COD 已收与送达同提交，拒付不算收入，余额退回不改历史。以真实 PG 测重复、并发、错误注入及回滚，勿绕开其他包端口。报告分支、路径、执行结果、证据和遗留。"},{"id":"P06","title":"三端 UI","prompt":"执行校零智选 P06，读 docs/superpowers/plans/2026-11-18-backend/{00-master,07-web,10-contracts,08-acceptance}.md。G0 后只写 web/src/{user,rider,admin}/ 和 web/tests/；根 index.html、demo/、锁文件、生成契约均不可改。保留 03 手账自绘视觉，按契约用 mock 起步；G2 后改用真实 API，测试从结算到骑手和管理流转。即时与预约明确分开，COD 显示待收，余额按能力与状态，微信只显示待接入，不伪造成功或收入。交三端构建、桌面/移动截图、实联调证据和变更路径；mock 绿不等于验收。"},{"id":"P07","title":"部署与运行","prompt":"执行校零智选 P07，读 docs/superpowers/plans/2026-11-18-backend/{00-master,09-deploy,10-contracts,08-acceptance}.md。G0 后只写 deploy/、.github/workflows/、docs/runbooks/。建单主机 Caddy/Go、私网 PostgreSQL 和独立审计的部署模板、CI、健康与告警、回滚及恢复流程，先本地/预发模拟。生产密钥和真实资金不用作测试，不实际部署或切公网，生产余额默认关闭、无微信入口。G3/G4 提交配置核验、恢复/回滚/告警证据、变更路径和开放项。"},{"id":"P08","title":"独立验收与安全审计","prompt":"你是校零智选独立验收员，执行 P08。读 docs/superpowers/plans/2026-11-18-backend/{00-master,08-acceptance,10-contracts,09-deploy}.md。只用经授权预发、合成账号/资金与脱敏证据，不修改生产代码、不测试未经授权环境。逐 ID 记录实际命令、版本、结果和证据；尤其复核越权、COD 上缴与拒付、余额重复扣退、预约争抢、恢复/RPO/RTO。G5 输出 COD 与余额分别 GO/NO-GO。有阻断项按包号退回修复并复测，不能以扫描通过替代人工审核或编造签字。"}]</script>
+<script>
+  const prompts = JSON.parse(document.getElementById('prompt-data').textContent);
+  const select = document.getElementById('prompt-select');
+  const text = document.getElementById('prompt-text');
+  const status = document.getElementById('copy-status');
+  const copy = document.getElementById('copy-prompt');
+  for (const {id, title} of prompts) select.add(new Option(`${id} · ${title}`, id));
+  function renderPrompt() {
+    text.value = prompts.find(item => item.id === select.value)?.prompt ?? '';
+    copy.disabled = text.value === '';
+    status.textContent = '';
+  }
+  select.addEventListener('change', renderPrompt);
+  copy.addEventListener('click', async () => {
+    try {
+      await navigator.clipboard.writeText(text.value);
+      status.textContent = '已复制 ' + select.value + ' 提示词。';
+    } catch {
+      text.focus(); text.select();
+      status.textContent = '浏览器未授权自动复制，提示词已全选。';
+    }
+  });
+  renderPrompt();
+</script>
+</body>
+</html>

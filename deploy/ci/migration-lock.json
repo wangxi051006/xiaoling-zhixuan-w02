@@ -1,0 +1,34 @@
+[
+  {
+    "name": "000_001_base.sql",
+    "sha256": "fa37da5718beff2065c6d8ce51f11db2c8b5ac62b4240fa2681ab1b947504d31"
+  },
+  {
+    "name": "010_001_identity.sql",
+    "sha256": "b4b6d677be743ae6d44394dea91c86b214604e154c4480b566f4effc8b4cd326"
+  },
+  {
+    "name": "020_001_catalog.sql",
+    "sha256": "ef58ca5068384d123833a45bda633ca05dd1438f3e317d2696b7f58cb08e5e52"
+  },
+  {
+    "name": "020_002_reservation_digest.sql",
+    "sha256": "1e1c95c1c341075c825e1013961084419cfb62b39fdb4cd7d1ddf38328f89650"
+  },
+  {
+    "name": "030_001_slots.sql",
+    "sha256": "b98094f62f493501c851e4342e71ed9e575acf2cb05a02f19f6320fd46c20c21"
+  },
+  {
+    "name": "040_001_settlement.sql",
+    "sha256": "1bcf9fe6aafb154a99925bfc597cce67a3eb2e7fb5bd8b812793d5ae9a5458ea"
+  },
+  {
+    "name": "050_001_fulfillment.sql",
+    "sha256": "693dfa24dce397c1c9c5872ae53c30acebcce3233a5b0db4e0420cb489a8ac50"
+  },
+  {
+    "name": "060_001_account_identity_email.sql",
+    "sha256": "2b08b22b6094af527b9e2021e71425419ee5095bf014c6f689de35acb8f40e51"
+  }
+]

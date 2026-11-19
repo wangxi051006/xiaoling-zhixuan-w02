@@ -1,0 +1,7 @@
+:root { color: #222c26; background: #f8f9f5; font: 16px/1.5 system-ui, sans-serif; }
+body { margin: 0; border-top: 4px solid #296749; }
+main { max-width: 58rem; margin-inline: auto; padding: 32px 24px; }
+header { padding-bottom: 16px; border-bottom: 1px solid #cfd8cf; }
+header span { font-size: 14px; font-weight: 650; color: #296749; }
+h1 { font-size: 28px; margin: 4px 0 0; }
+p { color: #47564d; margin: 20px 0 0; }

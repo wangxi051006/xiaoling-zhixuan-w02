@@ -1,0 +1,10 @@
+param([Parameter(Mandatory=$true)][string]$OutputPath)
+$taskRsa = [System.Security.Cryptography.RSA]::Create(2048)
+$taskRequest = [System.Security.Cryptography.X509Certificates.CertificateRequest]::new('CN=user.p06.test', $taskRsa, [System.Security.Cryptography.HashAlgorithmName]::SHA256, [System.Security.Cryptography.RSASignaturePadding]::Pkcs1)
+$taskNames = [System.Security.Cryptography.X509Certificates.SubjectAlternativeNameBuilder]::new()
+foreach ($taskName in @('user.p06.test','rider.p06.test','admin.p06.test')) { $taskNames.AddDnsName($taskName) }
+$taskRequest.CertificateExtensions.Add($taskNames.Build())
+$taskCert = $taskRequest.CreateSelfSigned([DateTimeOffset]::UtcNow.AddDays(-1), [DateTimeOffset]::UtcNow.AddDays(2))
+[IO.File]::WriteAllBytes($OutputPath, $taskCert.Export([System.Security.Cryptography.X509Certificates.X509ContentType]::Pfx, ''))
+$taskCert.Dispose()
+$taskRsa.Dispose()
