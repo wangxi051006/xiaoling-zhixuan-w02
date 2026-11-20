@@ -1,8 +1,10 @@
 package fulfillment
 
 import (
+	"campus.local/xiaoling/internal/contract"
 	"campus.local/xiaoling/internal/identity"
 	"context"
+	"encoding/json"
 	"github.com/jackc/pgx/v5"
 	"net/http"
 	"net/url"
@@ -64,7 +66,8 @@ func nextPage[T any](items []T, p pageInput, id func(T) string) page[T] {
 func (h *HTTP) read(w http.ResponseWriter, r *http.Request, actor identity.Session, route string) {
 	dateAllowed := route == "GET /admin/dashboard" || route == "GET /rider/earnings"
 	detail := strings.Contains(route, "{id}")
-	list := !detail && route != "GET /admin/dashboard"
+	list := !detail && route != "GET /admin/dashboard" && route != "GET /admin/delivery-fee" &&
+		route != "GET /admin/order-limits" && route != "GET /rider/capacity"
 	p, err := readPage(r.URL.RawQuery, dateAllowed, list)
 	if err != nil {
 		writeError(w, r, err)
@@ -103,6 +106,12 @@ func (h *HTTP) read(w http.ResponseWriter, r *http.Request, actor identity.Sessi
 			return earnings(r.Context(), tx, actor, p)
 		case "GET /rider/messages":
 			return messages(r.Context(), tx, actor, p)
+		case "GET /admin/delivery-fee":
+			return readDeliveryFee(r.Context(), tx, actor.StationID)
+		case "GET /admin/order-limits":
+			return readOrderLimits(r.Context(), tx, actor.StationID, false)
+		case "GET /rider/capacity":
+			return readRiderCapacity(r.Context(), tx, actor.StationID, actor.AccountID)
 		case "GET /admin/dashboard":
 			return dashboard(r.Context(), tx, actor, p.Date)
 		}
@@ -149,40 +158,50 @@ func (s *Service) taskList(ctx context.Context, tx pgx.Tx, actor identity.Sessio
 	if history {
 		clause = `t.rider_id=$2 AND t.state IN ('DELIVERED','CLOSED')`
 	}
-	rows, err := tx.Query(ctx, `SELECT t.id FROM delivery_tasks t JOIN orders o ON o.id=t.order_id WHERE o.station_id=$1 AND `+clause+` AND t.id>$3 ORDER BY t.id LIMIT $4`, actor.StationID, actor.AccountID, p.Cursor, p.Limit+1)
+	rows, err := tx.Query(ctx, `SELECT t.id,o.address_snapshot->>'BuildingName',o.item_count,o.fee_fen,o.slot_snapshot,o.status,o.method
+		FROM delivery_tasks t JOIN orders o ON o.id=t.order_id
+		WHERE o.station_id=$1 AND `+clause+` AND t.id>$3 ORDER BY t.id LIMIT $4`, actor.StationID, actor.AccountID, p.Cursor, p.Limit+1)
 	if err != nil {
 		return nil, err
 	}
-	ids, err := pgx.CollectRows(rows, pgx.RowTo[string])
-	if err != nil {
-		return nil, err
-	}
-	items := make([]LobbyTask, 0, len(ids))
-	for _, id := range ids {
-		v, e := s.Task(ctx, tx, actor, id)
-		if e != nil {
-			return nil, e
+	items, err := pgx.CollectRows(rows, func(row pgx.CollectableRow) (LobbyTask, error) {
+		var task LobbyTask
+		var slot contract.SlotSnapshot
+		var slotJSON []byte
+		if err := row.Scan(&task.ID, &task.BuildingName, &task.ItemCount, &task.FeeFen, &slotJSON, &task.Status, &task.Method); err != nil {
+			return LobbyTask{}, err
 		}
-		items = append(items, lobby(v))
+		if err := json.Unmarshal(slotJSON, &slot); err != nil {
+			return LobbyTask{}, err
+		}
+		task.Slot = slotView(slot)
+		return task, nil
+	})
+	if err != nil {
+		return nil, err
+	}
+	if items == nil {
+		items = []LobbyTask{}
 	}
 	return nextPage(items, p, func(t LobbyTask) string { return t.ID }), nil
 }
 
 type Earning struct {
-	ID     string    `json:"id"`
-	TaskID string    `json:"task_id"`
-	Amount int64     `json:"amount_fen"`
-	At     time.Time `json:"recorded_at"`
+	ID         string    `json:"id"`
+	TaskID     string    `json:"task_id"`
+	Amount     int64     `json:"amount_fen"`
+	At         time.Time `json:"recorded_at"`
+	Commission *int64    `json:"commission_fen,omitempty"`
 }
 
 func earnings(ctx context.Context, tx pgx.Tx, actor identity.Session, p pageInput) (any, error) {
-	rows, err := tx.Query(ctx, `SELECT e.id,e.task_id,e.amount_fen,e.recorded_at FROM rider_earnings e JOIN delivery_tasks t ON t.id=e.task_id JOIN orders o ON o.id=t.order_id WHERE o.station_id=$1 AND e.rider_id=$2 AND e.id>$3 AND (e.recorded_at AT TIME ZONE 'Asia/Shanghai')::date=$4::text::date ORDER BY e.id LIMIT $5`, actor.StationID, actor.AccountID, p.Cursor, p.Date, p.Limit+1)
+	rows, err := tx.Query(ctx, `SELECT e.id,e.task_id,e.amount_fen,e.recorded_at,e.commission_fen FROM rider_earnings e JOIN delivery_tasks t ON t.id=e.task_id JOIN orders o ON o.id=t.order_id WHERE o.station_id=$1 AND e.rider_id=$2 AND e.id>$3 AND (e.recorded_at AT TIME ZONE 'Asia/Shanghai')::date=$4::text::date ORDER BY e.id LIMIT $5`, actor.StationID, actor.AccountID, p.Cursor, p.Date, p.Limit+1)
 	if err != nil {
 		return nil, err
 	}
 	items, err := pgx.CollectRows(rows, func(r pgx.CollectableRow) (Earning, error) {
 		var v Earning
-		e := r.Scan(&v.ID, &v.TaskID, &v.Amount, &v.At)
+		e := r.Scan(&v.ID, &v.TaskID, &v.Amount, &v.At, &v.Commission)
 		v.At = v.At.UTC()
 		return v, e
 	})

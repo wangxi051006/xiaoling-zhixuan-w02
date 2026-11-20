@@ -168,8 +168,14 @@ func (f *fixture) issue(actor string) {
 	f.credentials[actor] = credential{token, session.CSRFToken, origin}
 }
 func (f *fixture) requestContext(ctx context.Context, actor, method, path, body, key string) *httptest.ResponseRecorder {
+	return f.requestFrom(ctx, actor, method, path, body, key, "")
+}
+func (f *fixture) requestFrom(ctx context.Context, actor, method, path, body, key, source string) *httptest.ResponseRecorder {
 	c := f.credentials[actor]
 	r := httptest.NewRequest(method, c.Origin+"/api/v1"+path, strings.NewReader(body)).WithContext(ctx)
+	if source != "" {
+		r.RemoteAddr = source
+	}
 	r.AddCookie(&http.Cookie{Name: identity.SessionCookieName, Value: c.Token})
 	r.Header.Set("Origin", c.Origin)
 	r.Header.Set("X-CSRF-Token", c.CSRF)
@@ -268,7 +274,11 @@ func TestP05CODLifecyclePrivacyAndUniqueCashIncome(t *testing.T) {
 	}
 	f.call("r2", "GET", "/rider/history", "", 200)
 	f.call("r1", "GET", "/rider/earnings", "", 200)
-	dashboard := f.call("op", "GET", "/admin/dashboard", "", 200)
+	var receiptDate string
+	if err := f.pool.QueryRow(f.ctx, `SELECT (collected_at AT TIME ZONE 'Asia/Shanghai')::date::text FROM cod_receipts WHERE order_id=$1`, id).Scan(&receiptDate); err != nil {
+		t.Fatal(err)
+	}
+	dashboard := f.call("op", "GET", "/admin/dashboard?date="+receiptDate, "", 200)
 	if dashboard["net_collected_fen"] != float64(100) {
 		t.Fatal(dashboard)
 	}
@@ -290,7 +300,8 @@ func TestP05BoundQuotesRevalidationAndCreationIdempotency(t *testing.T) {
 	if r.Code != 409 || !strings.Contains(r.Body.String(), "IDEMPOTENCY_CONFLICT") {
 		t.Fatal(r.Code, r.Body)
 	}
-	f.call("buyer", "POST", "/orders", fmt.Sprintf(`{"quote_id":%q}`, f.quote("buyer", "ASAP", "COD")), 409)
+	// A different idempotency key cannot submit the already used quote twice.
+	f.call("buyer", "POST", "/orders", fmt.Sprintf(`{"quote_id":%q}`, q), 409)
 	if f.n(`SELECT count(*) FROM orders`) != 1 || f.n(`SELECT used FROM delivery_slots WHERE id='asap'`) != 1 {
 		t.Fatal("duplicate reservations")
 	}

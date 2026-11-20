@@ -13,6 +13,7 @@ const schema = name => {
   return { $ref: `#/components/schemas/${name}` };
 };
 const json = name => ({ 'application/json': { schema: schema(name) } });
+const image = Object.fromEntries(['image/jpeg', 'image/png'].map(media => [media, { schema: { type: 'string', format: 'binary' } }]));
 const param = name => ({ $ref: `#/components/parameters/${name}` });
 const text = (maxLength = 128) => ({ type: 'string', minLength: 1, maxLength });
 const parameter = (name, where, type, required = false) => ({ name, in: where, required, schema: type });
@@ -55,16 +56,18 @@ for (const [owner, method, path, operationId, role, request, response, status = 
   }
   const success = { description: status === 302 ? 'Trusted redirect' : status === 204 ? 'No content' : 'Success' };
   if (response) success.content = json(response);
+  if (modes.has('image-response')) success.content = image;
   if (status === 302) success.headers = { Location: { required:true, schema: { type:'string', format:'uri-reference' } } };
   if (operationId === 'verifyOTP' || operationId === 'verifyEmailCode' || operationId === 'completeStaffLogin' || operationId === 'logout') success.headers = { ...success.headers, 'Set-Cookie': { schema: { type:'string' } } };
   const responses = { [status]: success };
   const errors = { 400:'Invalid request', 401:'Authentication required', 403:'Forbidden', 404:'Not found', 409:'State or version conflict', 413:'Request too large', 429:'Rate limited', 500:'Internal error', 503:'Service unavailable' };
   for (const [code, description] of Object.entries(errors)) responses[code] = { description, content: json('ApiError') };
+  const requestContent = request ? json(request) : modes.has('image-request') ? image : undefined;
   (settings.paths[path] ??= {})[method] = {
     operationId, summary: operationId.replace(/([a-z])([A-Z])/g, '$1 $2'), tags: [owner],
     'x-roles': roles, 'x-idempotency-required': modes.has('key'), 'x-recent-mfa': modes.has('mfa'),
     security: roles.length ? [{ session: [] }] : [], parameters,
-    ...(request ? { requestBody: { required: true, content: json(request) } } : {}), responses,
+    ...(requestContent ? { requestBody: { required: true, content: requestContent } } : {}), responses,
   };
 }
 
@@ -94,7 +97,11 @@ go.push('\t}', '}');
 ts.push('');
 for (const [name, s] of Object.entries(schemasByName)) if (!Object.hasOwn(enums, name)) ts.push(`export type ${name} = ${type(s)};`);
 ts.push('', 'export interface Operations {');
-for (const [, method, path, id, , request, response, status = 200] of operations) ts.push(`  ${id}: { method: '${method.toUpperCase()}'; path: '${path}'; body: ${request ?? 'undefined'}; result: ${response ?? 'undefined'}; status: ${status} };`);
+for (const [, method, path, id, , request, response, status = 200, flags = ''] of operations) {
+  const body = flags === 'image-request' ? 'Blob' : request ?? 'undefined';
+  const result = flags === 'image-response' ? 'Blob' : response ?? 'undefined';
+  ts.push(`  ${id}: { method: '${method.toUpperCase()}'; path: '${path}'; body: ${body}; result: ${result}; status: ${status} };`);
+}
 ts.push('}');
 const outputs = {
   'openapi.yaml': JSON.stringify(settings, null, 2),

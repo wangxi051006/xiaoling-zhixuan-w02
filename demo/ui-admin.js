@@ -8,8 +8,9 @@
       ['riders', '骑手', '<circle cx="12" cy="8.5" r="3.6"/><path d="M4.8 20c1-3.6 3.9-5.6 7.2-5.6s6.2 2 7.2 5.6"/>']
     ];
     return '<nav class="tabbar">' + items.map(function (it) {
-      return '<a class="' + (active === it[0] ? 'on' : '') + '" data-act="tab" data-val="' + it[0] + '">' +
-        '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6">' + it[2] + '</svg>' + it[1] + '</a>';
+      var on = active === it[0];
+      return '<button class="' + (on ? 'on' : '') + '"' + (on ? ' aria-current="page"' : '') + ' data-act="tab" data-val="' + it[0] + '">' +
+        '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true">' + it[2] + '</svg>' + it[1] + '</button>';
     }).join('') + '</nav>' + homebar();
   }
 
@@ -26,19 +27,26 @@
     var bars = week ? [72, 64, 81, 68, 90, 86, 96] : [38, 52, 44, 66, 58, 78, 92];
     var labels = week ? ['一', '二', '三', '四', '五', '六', '日'] : ['12', '13', '14', '15', '16', '17', '18'];
     var peak = week ? 96 : 92;
+    var todos = a.todos.map(function (t, index) { return { item: t, index: index }; });
+    todos.sort(function (a, b) { return Number(a.item.done) - Number(b.item.done); });
     return statusbar() +
       '<div class="scroll" style="padding-top:4px">' +
         '<div class="ahead" style="display:flex;align-items:flex-end;justify-content:space-between">' +
-          '<div><div class="small muted" style="letter-spacing:.14em">经营手账 · 北苑仓</div>' +
-            '<h1 class="h-serif" style="font-size:22px;margin-top:5px">' + (week ? '本周过得不错' : '今天过得还不错') + '</h1></div>' +
+          '<div><div class="small muted">北苑仓 · 经营手账</div>' +
+            '<h1 class="h-serif" style="font-size:24px;margin-top:5px">运营看板</h1></div>' +
           '<div class="range" style="display:flex;border:1px solid var(--line);border-radius:8px;overflow:hidden;background:var(--card)">' +
             [['today', '今日'], ['week', '本周']].map(function (r) {
               return '<button class="chip ' + (a.range === r[0] ? 'on' : '') + '" style="border:0;border-radius:0;padding:6px 10px;font-size:9.5px" data-act="aRange" data-val="' + r[0] + '">' + r[1] + '</button>';
             }).join('') + '</div></div>' +
-        '<div class="a-kpis" style="margin-top:14px">' +
-          kpi('营业额', '¥' + Math.round(gmv).toLocaleString(), week ? '上周 72,000' : '比昨天多卖 1,910', '+18%') +
+        '<section class="admin-todos"><div class="row-between"><h2>待处理事项</h2><span>' + a.todos.filter(function (t) { return !t.done; }).length + ' 件待处理</span></div>' +
+          todos.map(function (entry) {
+            var t = entry.item;
+            return '<button class="a-todo ' + (t.done ? 'cked' : '') + '" aria-pressed="' + t.done + '" data-act="aTodo" data-val="' + entry.index + '"><span class="ck" aria-hidden="true"></span><span class="todo-text">' + esc(t.t) + '</span><span class="todo-due">' + (t.done ? '已完成' : t.due) + '</span></button>';
+          }).join('') + '</section>' +
+        '<div class="sechead"><h2>经营概览</h2></div><div class="a-kpis">' +
+          kpi('营业额', money(gmv), week ? '上周 ' + money(72000) : '比昨天多卖 ' + money(1910), '+18%') +
           kpi('订单', cnt, week ? '日均 345 单' : '待处理 ' + (12 + extra) + ' 单', '+9%') +
-          kpi('客单价', '¥32.3', '两件以上 61%') +
+          kpi('客单价', money(32.3), '两件以上 61%') +
           kpi('履约率', '98.2%', '3 单超时 · 已赔付') +
         '</div>' +
         '<div class="abar-c"><div class="ch"><b class="h-serif">' + (week ? '本周订单' : '今日订单') + '</b><span>' + (week ? '周三' : '20:00') + ' 峰值 ' + peak + '</span></div>' +
@@ -50,10 +58,6 @@
         '<div class="card a-feed" style="margin-bottom:12px"><div class="row-between" style="margin-bottom:4px"><b class="h-serif" style="font-size:12px">实时动态</b><span class="small muted">每 10 秒刷新</span></div>' +
           a.feed.map(function (f) {
             return '<div class="f"><time>' + f.t + '</time><i class="' + f.dot + '"></i><div>' + f.text + '</div><span style="margin-left:auto;color:#A29888;font-size:8.5px">' + f.tag + '</span></div>';
-          }).join('') + '</div>' +
-        '<div class="card"><div class="row-between" style="margin-bottom:4px"><b class="h-serif" style="font-size:12px">今天还要做</b><span class="small muted">' + a.todos.filter(function (t) { return !t.done; }).length + ' 件</span></div>' +
-          a.todos.map(function (t, i) {
-            return '<div class="a-todo ' + (t.done ? 'cked' : '') + '" data-act="aTodo" data-val="' + i + '"><span class="ck"></span><div>' + t.t + '</div><span>' + t.due + '</span></div>';
           }).join('') + '</div>' +
         '<div style="height:14px"></div>' +
       '</div>' + aTab('dash');
@@ -71,22 +75,35 @@
     return list.map(function (o) {
       var m = statusMeta(o.status);
       return '<div class="a-order" data-act="aOpen" data-val="' + o.no + '">' +
-        '<div class="ao-top"><span class="no">' + o.no + '</span><span class="who">' + (o.contact || '') + '</span>' +
+        '<div class="ao-top">' +
+          (merchantStage(o) ? selectionButton('aSelect', o.no, state.admin.orderSelection, false) : '') +
+          '<span class="no">' + o.no + '</span><span class="who">' + esc(o.contact || '') + '</span>' +
           '<span class="pill st ' + m[0] + '">' + m[1] + '</span>' +
           '<span class="amt">' + money(orderTotal(o)) + '</span></div>' +
-        '<div class="ao-sub"><span>' + o.addr + '</span><span>' + maskPhone(o.phone) + '</span></div></div>';
+        '<div class="ao-sub"><span>' + esc(o.addr) + '</span><span>' + maskPhone(o.phone) + '</span></div></div>';
     }).join('');
   }
-  window.ALIST = function () { return { html: adminRows(), count: adminOrders().length }; };
+  function batchControls() {
+    var selection = state.admin.orderSelection;
+    var stages = selection.map(function (no) { return merchantStage(orderByNo(no)); });
+    var accept = stages.length && stages.every(function (stage) { return stage === 'accept'; });
+    var ready = stages.length && stages.every(function (stage) { return stage === 'ready'; });
+    return '<div class="batch-tools"><span aria-live="polite">已选 ' + selection.length + ' 单</span>' +
+      batchButton('aBatch', '批量接单', !accept || selection.length > state.station.merchantLimit, 'accept') +
+      batchButton('aBatch', '批量出餐', !ready, 'ready') +
+      '<button class="btn sm ghost" data-act="aClear"' + (!selection.length ? ' disabled' : '') + '>清除</button></div>' +
+      '<div class="small muted">每批最多接 ' + state.station.merchantLimit + ' 单，出餐后推送到配送端。</div>';
+  }
+  window.ALIST = function () { return { html: adminRows(), count: adminOrders().length, controls: batchControls() }; };
 
   VIEWS.admin.orders = function () {
-    var filters = ['全部', '备货中', '配送中', '已完成'];
+    var filters = ['全部', '待商家接单', '备货中', '待骑手接单', '待取货', '配送中', '已完成'];
     var ranges = [['all', '全部时间'], ['today', '今天'], ['3d', '近 3 天']];
     return statusbar() +
       '<div class="scroll" style="padding-top:4px">' +
         '<div class="row-between"><div><div class="small muted" style="letter-spacing:.14em">ORDERS</div>' +
           '<h1 class="h-serif" style="font-size:22px;margin-top:4px">订单管理</h1></div>' +
-          '<span class="small muted" id="aOrderCount">' + adminOrders().length + ' 单</span></div>' +
+          '<button class="btn sm ghost" data-act="aSettings">配送费与接单设置</button></div>' +
         '<div class="search" style="margin-top:12px">' +
           '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="10.5" cy="10.5" r="6.5"/><path d="M15.5 15.5L21 21"/></svg>' +
           '<input data-input="asearch" value="' + esc(state.admin.q) + '" placeholder="订单号 / 手机号 / 收货人 / 地址">' +
@@ -97,8 +114,9 @@
         '<div class="chips" style="margin-top:6px">' + filters.map(function (f) {
           return '<button class="chip ' + (state.admin.filter === f ? 'on' : '') + '" data-act="aFilter" data-val="' + f + '">' + f + '</button>';
         }).join('') + '</div>' +
-        '<div class="card" style="margin-top:10px" id="aOrderList">' + adminRows() + '</div>' +
-        '<p class="small muted" style="padding:12px 2px;line-height:1.7">点任意一条看详情与日志：派单会把订单推到配送端待抢单，退款会直接改状态。</p>' +
+        '<div id="aBatchControls">' + batchControls() + '</div>' +
+        '<p class="small muted" id="aOrderCount" style="margin-top:10px">' + adminOrders().length + ' 单</p>' +
+        '<div class="card" style="margin-top:6px" id="aOrderList">' + adminRows() + '</div>' +
         '<div style="height:10px"></div>' +
       '</div>' + aTab('orders');
   };
@@ -111,9 +129,9 @@
       var cls = p.stock <= p.safe ? 'low' : '';
       return '<div class="goods-row ' + (p.shelf === false ? 'off' : '') + '">' +
         '<div class="goods-top">' +
-          '<div class="cart-thumb ' + p.tone + '" style="width:38px;height:38px"><span></span></div>' +
-          '<div style="min-width:0;flex:1"><b>' + p.name + (promoActive(p) ? '<span class="tag-sale">促 ' + offLabel(promoBestTier(p).off) + '</span>' : '') + '</b>' +
-            '<small>' + p.spec + ' · ' + money(p.price) + ' · ' + p.cat + '</small></div>' +
+          '<div class="cart-thumb ' + p.tone + '" style="width:38px;height:38px">' + productPhoto(p.image, p.name, '<span></span>') + '</div>' +
+          '<div style="min-width:0;flex:1"><b>' + esc(p.name) + (promoActive(p) ? '<span class="tag-sale">促 ' + offLabel(promoBestTier(p).off) + '</span>' : '') + '</b>' +
+            '<small>' + esc(p.spec) + ' · ' + money(p.price) + ' · ' + p.cat + '</small></div>' +
           '<div class="stock-step"><button data-act="stock" data-val="' + p.id + '|-1">−</button><b>' + p.stock + '</b><button data-act="stock" data-val="' + p.id + '|1">＋</button></div>' +
         '</div>' +
         '<div class="stockbar ' + cls + '"><i style="width:' + pct + '%"></i></div>' +

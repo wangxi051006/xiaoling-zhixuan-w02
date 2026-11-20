@@ -51,6 +51,7 @@ func (h *IdentityHTTP) Register(mux *http.ServeMux) {
 	mux.HandleFunc("GET /api/v1/auth/staff/callback", h.completeStaff)
 	mux.HandleFunc("POST /api/v1/auth/logout", h.logout)
 	mux.HandleFunc("GET /api/v1/me", h.me)
+	mux.HandleFunc("GET /api/v1/me/service-buildings", h.listServiceBuildings)
 	mux.HandleFunc("GET /api/v1/me/addresses", h.listAddresses)
 	mux.HandleFunc("POST /api/v1/me/addresses", h.createAddress)
 	mux.HandleFunc("PATCH /api/v1/me/addresses/{id}", h.updateAddress)
@@ -153,7 +154,7 @@ func cookieValue(r *http.Request, name string) string {
 var allRoles = []contract.Role{contract.RoleCustomer, contract.RoleRider, contract.RoleOperator, contract.RoleFinance, contract.RoleSecurityAdmin}
 
 func (h *IdentityHTTP) authorized(w http.ResponseWriter, r *http.Request, entry Entry, mfa bool, roles ...contract.Role) (Session, bool) {
-	session, err := h.sessions.Lookup(r.Context(), cookieValue(r, SessionCookieName), entry)
+	session, err := h.sessions.lookup(r.Context(), cookieValue(r, SessionCookieName), entry, h.policy.local && loopbackPeer(r))
 	if err == nil {
 		err = h.policy.Authorize(r, entry, session, h.sessions.clock.Now(), mfa, roles...)
 	}
@@ -397,6 +398,23 @@ type addressResponse struct {
 
 func showAddress(a contract.AddressSnapshot) addressResponse {
 	return addressResponse{a.AddressID, a.BuildingID, a.BuildingName, a.Room, a.ContactName, a.ContactPhone, a.Version}
+}
+
+func (h *IdentityHTTP) listServiceBuildings(w http.ResponseWriter, r *http.Request) {
+	s, ok := h.Authenticated(w, r, UserEntry, false, contract.RoleCustomer)
+	if !ok {
+		return
+	}
+	cursor, limit, ok := pagination(w, r)
+	if !ok {
+		return
+	}
+	rows, err := h.directory.ListServiceBuildings(r.Context(), s.StationID, cursor, limit+1)
+	if err != nil {
+		identityError(w, r, err)
+		return
+	}
+	writeIdentityJSON(w, http.StatusOK, identityList(rows, limit, func(b ServiceBuilding) string { return b.ID }))
 }
 
 func (h *IdentityHTTP) listAddresses(w http.ResponseWriter, r *http.Request) {

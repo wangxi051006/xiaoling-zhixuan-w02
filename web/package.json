@@ -9,7 +9,7 @@
     "test": "node --test tests/api.test.mjs tests/cod-difference.test.mjs",
     "contract": "node ../contracts/generate.mjs --check",
     "build": "npm run contract && vite build",
-    "test:e2e": "node --test tests/entries.e2e.mjs tests/identity.e2e.mjs",
+    "test:e2e": "node --test tests/entries.e2e.mjs tests/identity.e2e.mjs tests/local-login.e2e.mjs",
     "test:e2e:p08": "node --test --test-reporter=tap tests/p08-cod-discrepancy.e2e.mjs"
   },
   "engines": {

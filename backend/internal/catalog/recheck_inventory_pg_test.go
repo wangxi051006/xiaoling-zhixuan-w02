@@ -382,7 +382,7 @@ func TestCatalogMigrationsStandaloneRepeatAndUniqueVersions(t *testing.T) {
 			t.Fatal("duplicate global migration version")
 		}
 		seen[version] = true
-		if strings.HasPrefix(name, "000_") || strings.HasPrefix(name, "020_") {
+		if strings.HasPrefix(name, "000_") || strings.HasPrefix(name, "020_") || name == "070_001_product_image_url.sql" {
 			data, err := fs.ReadFile(migrations.SQL, name)
 			if err != nil {
 				t.Fatal(err)
@@ -408,7 +408,7 @@ func TestCatalogMigrationsStandaloneRepeatAndUniqueVersions(t *testing.T) {
 		t.Fatal("repeat changed historical digest/time or existing business data")
 	}
 	var n int
-	if err = pool.QueryRow(ctx, `SELECT count(*) FROM schema_migrations WHERE version NOT LIKE '000_%' AND version NOT LIKE '020_%'`).Scan(&n); err != nil || n != 0 {
+	if err = pool.QueryRow(ctx, `SELECT count(*) FROM schema_migrations WHERE version NOT LIKE '000_%' AND version NOT LIKE '020_%' AND version<>'070_001'`).Scan(&n); err != nil || n != 0 {
 		t.Fatal("core fixture used another domain's migration")
 	}
 	if err = pool.QueryRow(ctx, `SELECT count(*) FROM information_schema.tables WHERE table_schema=current_schema() AND table_name IN ('accounts','sessions','delivery_slots','wallets','orders')`).Scan(&n); err != nil || n != 0 {

@@ -90,3 +90,34 @@ func TestProductionRequiresExplicitSecureConfig(t *testing.T) {
 		t.Fatalf("secure config rejected: %v", err)
 	}
 }
+
+func TestLocalTestAuthRequiresLocalOriginsAndDatabase(t *testing.T) {
+	env := map[string]string{
+		"APP_ENV": "development", "DATABASE_URL": "postgres://fixture@127.0.0.1/test",
+		"USER_ORIGIN": "http://user.localhost:5174", "RIDER_ORIGIN": "http://rider.localhost:5174",
+		"ADMIN_ORIGIN": "http://admin.localhost:5174",
+	}
+	load := func() error { _, err := LoadConfig(func(k string) string { return env[k] }); return err }
+	env["ALLOW_TEST_AUTH"] = "true"
+	if err := load(); err != nil {
+		t.Fatalf("local-only test setup rejected: %v", err)
+	}
+	env["ADMIN_ORIGIN"] = "https://admin.example.test"
+	if err := load(); err == nil {
+		t.Fatal("test credentials allowed on a nonlocal origin")
+	}
+	env["ADMIN_ORIGIN"] = "http://admin.localhost:5174"
+	env["DATABASE_URL"] = "postgres://fixture@192.0.2.10/test"
+	if err := load(); err == nil {
+		t.Fatal("test credentials allowed against a nonlocal database")
+	}
+	env["DATABASE_URL"] = "postgres://fixture@127.0.0.1/test?host=192.0.2.10"
+	if err := load(); err == nil {
+		t.Fatal("database host override allowed in test mode")
+	}
+	env["DATABASE_URL"] = "postgres://fixture@127.0.0.1/test"
+	env["ALLOW_TEST_AUTH"] = "yes"
+	if err := load(); err == nil {
+		t.Fatal("implicit test auth flag accepted")
+	}
+}

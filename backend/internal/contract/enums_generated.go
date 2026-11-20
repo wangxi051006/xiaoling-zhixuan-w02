@@ -82,6 +82,9 @@ const (
 	ErrorCodeCodActiveLimit ErrorCode = "COD_ACTIVE_LIMIT"
 	ErrorCodeIdempotencyConflict ErrorCode = "IDEMPOTENCY_CONFLICT"
 	ErrorCodeTaskAlreadyClaimed ErrorCode = "TASK_ALREADY_CLAIMED"
+	ErrorCodeOrderLimitReached ErrorCode = "ORDER_LIMIT_REACHED"
+	ErrorCodeCodBatchDeliveryForbidden ErrorCode = "COD_BATCH_DELIVERY_FORBIDDEN"
+	ErrorCodeCodClaimExclusive ErrorCode = "COD_CLAIM_EXCLUSIVE"
 	ErrorCodeInvalidState ErrorCode = "INVALID_STATE"
 	ErrorCodeBadRequest ErrorCode = "BAD_REQUEST"
 	ErrorCodeUnauthenticated ErrorCode = "UNAUTHENTICATED"
@@ -102,6 +105,6 @@ func ContractEnums() map[string][]string {
 		"StockStatus": {string(StockStatusUnsorted), string(StockStatusSorted), string(StockStatusRestockPending), string(StockStatusRestocked)},
 		"SettlementStatus": {string(SettlementStatusCodUncollected), string(SettlementStatusCodCollected), string(SettlementStatusBalancePaid), string(SettlementStatusVoid), string(SettlementStatusRefundPending), string(SettlementStatusRefunded)},
 		"RemittanceStatus": {string(RemittanceStatusNotRemitted), string(RemittanceStatusInBatch), string(RemittanceStatusVerified), string(RemittanceStatusDiscrepancy)},
-		"ErrorCode": {string(ErrorCodeQuoteChanged), string(ErrorCodeSlotFull), string(ErrorCodeSlotExpired), string(ErrorCodeOutOfStock), string(ErrorCodePaymentMethodDisabled), string(ErrorCodeInsufficientBalance), string(ErrorCodeCodActiveLimit), string(ErrorCodeIdempotencyConflict), string(ErrorCodeTaskAlreadyClaimed), string(ErrorCodeInvalidState), string(ErrorCodeBadRequest), string(ErrorCodeUnauthenticated), string(ErrorCodeForbidden), string(ErrorCodeNotFound), string(ErrorCodeRateLimited), string(ErrorCodeBodyTooLarge), string(ErrorCodeInternalError), string(ErrorCodeNotReady)},
+		"ErrorCode": {string(ErrorCodeQuoteChanged), string(ErrorCodeSlotFull), string(ErrorCodeSlotExpired), string(ErrorCodeOutOfStock), string(ErrorCodePaymentMethodDisabled), string(ErrorCodeInsufficientBalance), string(ErrorCodeCodActiveLimit), string(ErrorCodeIdempotencyConflict), string(ErrorCodeTaskAlreadyClaimed), string(ErrorCodeOrderLimitReached), string(ErrorCodeCodBatchDeliveryForbidden), string(ErrorCodeCodClaimExclusive), string(ErrorCodeInvalidState), string(ErrorCodeBadRequest), string(ErrorCodeUnauthenticated), string(ErrorCodeForbidden), string(ErrorCodeNotFound), string(ErrorCodeRateLimited), string(ErrorCodeBodyTooLarge), string(ErrorCodeInternalError), string(ErrorCodeNotReady)},
 	}
 }

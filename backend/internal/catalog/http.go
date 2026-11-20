@@ -24,12 +24,15 @@ import (
 
 type HTTP struct {
 	Pool      *pgxpool.Pool
+	ImageDir  string
 	Authorize func(http.ResponseWriter, *http.Request, identity.Entry, bool, ...contract.Role) (identity.Session, bool)
 }
 
 func (h *HTTP) Register(mux *http.ServeMux) {
 	mux.HandleFunc("GET /api/v1/catalog/products", h.available(h.listPublic))
 	mux.HandleFunc("GET /api/v1/catalog/products/{id}", h.available(h.getPublic))
+	mux.HandleFunc("GET "+imageURLPrefix+"{id}", h.getProductImage)
+	mux.HandleFunc(ImageUploadPattern, h.operator(h.uploadProductImage))
 	mux.HandleFunc("GET /api/v1/admin/products", h.operator(h.listAdmin))
 	mux.HandleFunc("POST /api/v1/admin/products", h.operator(h.create))
 	mux.HandleFunc("PATCH /api/v1/admin/products/{id}", h.operator(h.update))
@@ -63,7 +66,10 @@ var errIdempotency = errors.New("catalog idempotency conflict")
 
 func catalogError(w http.ResponseWriter, r *http.Request, err error) {
 	status, code := 500, "INTERNAL_ERROR"
+	var tooLarge *http.MaxBytesError
 	switch {
+	case errors.As(err, &tooLarge):
+		status, code = 413, "BODY_TOO_LARGE"
 	case errors.Is(err, ErrInvalid):
 		status, code = 400, "BAD_REQUEST"
 	case errors.Is(err, ErrNotFound):
@@ -299,6 +305,7 @@ func (h *HTTP) create(w http.ResponseWriter, r *http.Request, s identity.Session
 	var body struct {
 		Name        *string `json:"name"`
 		Description *string `json:"description"`
+		ImageURL    string  `json:"image_url"`
 		OnSale      *bool   `json:"on_sale"`
 		Reorder     *int64  `json:"reorder_point"`
 		SKUs        []struct {
@@ -311,7 +318,7 @@ func (h *HTTP) create(w http.ResponseWriter, r *http.Request, s identity.Session
 		catalogError(w, r, ErrInvalid)
 		return
 	}
-	in := ProductInput{Name: *body.Name, Description: *body.Description, OnSale: *body.OnSale, ReorderPoint: *body.Reorder, SKUs: make([]SKUInput, 0, len(body.SKUs))}
+	in := ProductInput{Name: *body.Name, Description: *body.Description, ImageURL: body.ImageURL, OnSale: *body.OnSale, ReorderPoint: *body.Reorder, SKUs: make([]SKUInput, 0, len(body.SKUs))}
 	for _, item := range body.SKUs {
 		if item.Label == nil || item.Units == nil || item.Price == nil {
 			catalogError(w, r, ErrInvalid)
@@ -320,6 +327,9 @@ func (h *HTTP) create(w http.ResponseWriter, r *http.Request, s identity.Session
 		in.SKUs = append(in.SKUs, SKUInput{*item.Label, *item.Units, *item.Price})
 	}
 	h.keyed(w, r, s, "createProduct", in, func(ctx context.Context, tx pgx.Tx) (any, error) {
+		if err := h.checkProductImage(s.StationID, in.ImageURL); err != nil {
+			return nil, err
+		}
 		return (Store{}).CreateProduct(ctx, tx, s.StationID, in)
 	})
 }
@@ -328,6 +338,7 @@ func (h *HTTP) update(w http.ResponseWriter, r *http.Request, s identity.Session
 	var body struct {
 		Name        *string    `json:"name"`
 		Description *string    `json:"description"`
+		ImageURL    *string    `json:"image_url"`
 		OnSale      *bool      `json:"on_sale"`
 		Reorder     *int64     `json:"reorder_point"`
 		Expected    int64      `json:"expected_version"`
@@ -338,7 +349,7 @@ func (h *HTTP) update(w http.ResponseWriter, r *http.Request, s identity.Session
 		catalogError(w, r, ErrInvalid)
 		return
 	}
-	in := ProductUpdate{Name: body.Name, Description: body.Description, OnSale: body.OnSale, ReorderPoint: body.Reorder, ExpectedVersion: body.Expected}
+	in := ProductUpdate{Name: body.Name, Description: body.Description, ImageURL: body.ImageURL, OnSale: body.OnSale, ReorderPoint: body.Reorder, ExpectedVersion: body.Expected}
 	if body.SKUs != nil {
 		items := make([]SKU, 0, len(*body.SKUs))
 		for _, item := range *body.SKUs {
@@ -350,6 +361,12 @@ func (h *HTTP) update(w http.ResponseWriter, r *http.Request, s identity.Session
 			items = append(items, SKU{*item.ID, v.Label, v.UnitsPerPack, v.UnitPriceFen})
 		}
 		in.SKUs = &items
+	}
+	if in.ImageURL != nil {
+		if err := h.checkProductImage(s.StationID, *in.ImageURL); err != nil {
+			catalogError(w, r, err)
+			return
+		}
 	}
 	h.writeProduct(w, r, s, "updateProduct", func(tx pgx.Tx) (AdminProduct, error) {
 		return (Store{}).UpdateProduct(r.Context(), tx, s.StationID, id, in)

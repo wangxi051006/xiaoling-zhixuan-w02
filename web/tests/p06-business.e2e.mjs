@@ -6,6 +6,8 @@ import {startHarness} from './p06-harness.mjs';
 
 test('P06 LOCAL REAL: compiled entries → Go identity/API/worker → isolated PostgreSQL',async t=>{
  const h=await startHarness();
+ const localDate=new Intl.DateTimeFormat('sv-SE',{timeZone:'Asia/Shanghai',dateStyle:'short'});
+ const startDate=localDate.format(new Date());
  const evidence=[];let user,rider,admin,fin,fin2;let delivered,scheduled,returned;let checkoutShot=false,currentShot=false;
  const call=async(a,method,path,body,want=200,key)=>{const r=await h.request(a,method,path,body,key);assert.equal(r.status,want,`${method} ${path}: ${r.body?.code??r.status}`);return r.body;};
  async function scenario(id,name,fn){await t.test(id+' '+name,async()=>{const startedAt=new Date().toISOString();try{await fn();evidence.push({id,name,status:'PASS',level:'LOCAL_REAL_PROPOSED_WIRING',startedAt,finishedAt:new Date().toISOString()});}catch(e){evidence.push({id,name,status:'FAIL',level:'LOCAL_REAL_PROPOSED_WIRING',startedAt,finishedAt:new Date().toISOString(),error:e.message});throw e;}});}
@@ -18,7 +20,15 @@ test('P06 LOCAL REAL: compiled entries → Go identity/API/worker → isolated P
  }
  async function apiOrder(a,{mode='ASAP',method='COD',slot='later'}={}){const quote=await call(a,'POST','/checkout/quote',{lines:[{sku_id:h.info.sku,qty:1}],address_id:'a'+a.id.replace('buyer',''),delivery_mode:mode,payment_method:method,...(mode==='SCHEDULED'?{slot_id:slot}:{})},201);return call(a,'POST','/orders',{quote_id:quote.quote_id},201);}
  async function selectAdmin(order){await admin.page.reload();await tab(admin,'订单履约');await admin.page.getByTestId('order-'+order.id).click();}
- async function adminAction(action,order){await selectAdmin(order);const response=admin.page.waitForResponse(r=>r.url().endsWith('/'+order.id+'/'+action)&&r.request().method()==='POST');await admin.page.getByTestId(action).click();const r=await response;assert.equal(r.status(),200);return r.json();}
+ async function adminAction(action,order){
+  await selectAdmin(order);
+  if(action==='prepare'){
+   await admin.page.getByTestId('merchant-accept').click();
+   await admin.page.getByRole('status').filter({hasText:'已接单 1 单'}).waitFor();
+  }
+  const response=admin.page.waitForResponse(r=>r.url().endsWith('/'+order.id+'/'+action)&&r.request().method()==='POST');
+  await admin.page.getByTestId(action).click();const r=await response;assert.equal(r.status(),200);return r.json();
+ }
  async function dispatch(order){await adminAction('prepare',order);await adminAction('dispatch',order);const list=await call(rider,'GET','/rider/tasks');const task=list.items.find(v=>v.order_status==='READY_FOR_CLAIM');assert.ok(task);return task;}
  async function uiDeliver(task,urgeActor){await rider.page.reload();if(!currentShot)for(const w of [1440,390])await h.shot(rider,'rider-hall',w);await rider.page.getByTestId('claim-'+task.id).click();await rider.page.getByTestId('pickup').waitFor();await rider.page.getByTestId('pickup').click();await rider.page.getByLabel('已全额收到货到付款',{exact:true}).waitFor();if(!currentShot){for(const w of [1440,390])await h.shot(rider,'rider-current-task',w);currentShot=true;}if(urgeActor){await call(urgeActor,'POST','/orders/'+delivered.id+'/urge',undefined,202);await h.control('advance',{Minutes:0});await rider.page.getByTestId('refresh-tasks').click();await tab(rider,'消息');await rider.page.getByTestId('read-all').click();const mail=await call(rider,'GET','/rider/messages');assert.ok(mail.items.length>0&&mail.items.every(m=>m.read_at));for(const w of [1440,390])await h.shot(rider,'rider-messages',w);await tab(rider,'当前任务');}await rider.page.getByLabel('已全额收到货到付款',{exact:true}).check();const response=rider.page.waitForResponse(r=>r.url().endsWith('/'+task.id+'/deliver'));await rider.page.getByTestId('deliver').click();assert.equal((await response).status(),200);}
  try {
@@ -51,10 +61,22 @@ test('P06 LOCAL REAL: compiled entries → Go identity/API/worker → isolated P
    const history=await call(rider,'GET','/rider/history');assert.ok(history.items.every(t=>!('address'in t)));const income=await call(rider,'GET','/rider/earnings');assert.equal(income.items.length,1);
   });
   await scenario('PAY-02','independent finance batch verification, duplicate retry and refund approval/payout separation',async()=>{
-   const receipts=await call(fin,'GET','/admin/cod/receipts');const receipt=receipts.items.find(r=>r.order_id===delivered.id);assert.ok(receipt);
-   const body={rider_id:'r1',local_date:'2026-11-19',receipt_ids:[receipt.id]};await tab(fin,'COD 财务');await fin.page.getByLabel('上缴骑手',{exact:true}).selectOption('r1');await fin.page.getByLabel('凭证 '+receipt.id,{exact:true}).check();let response=fin.page.waitForResponse(r=>r.url().endsWith('/api/v1/admin/cod/batches')&&r.request().method()==='POST');await fin.page.getByTestId('create-cod-batch').click();let result=await response;assert.equal(result.status(),201);const batch=await result.json();assert.equal((await call(fin,'POST','/admin/cod/batches',body,201,result.request().headers()['idempotency-key'])).id,batch.id);
+   // PostgreSQL timestamps COD receipts using its wall clock.
+   let receipt;
+   for(const day of new Set([startDate,localDate.format(new Date())])){
+    const receipts=await call(fin,'GET','/admin/cod/receipts?date='+day);
+    receipt=receipts.items.find(r=>r.order_id===delivered.id);
+    if(receipt)break;
+   }
+   assert.ok(receipt);
+   const receiptDate=localDate.format(new Date(receipt.collected_at));
+   const body={rider_id:'r1',local_date:receiptDate,receipt_ids:[receipt.id]};
+   await tab(fin,'COD 财务');
+   await fin.page.getByLabel('收款日期',{exact:true}).fill(receiptDate);
+   await fin.page.getByTestId('refresh-admin').click();
+   await fin.page.getByLabel('上缴骑手',{exact:true}).selectOption('r1');await fin.page.getByLabel('凭证 '+receipt.id,{exact:true}).check();let response=fin.page.waitForResponse(r=>r.url().endsWith('/api/v1/admin/cod/batches')&&r.request().method()==='POST');await fin.page.getByTestId('create-cod-batch').click();let result=await response;assert.equal(result.status(),201);const batch=await result.json();assert.equal((await call(fin,'POST','/admin/cod/batches',body,201,result.request().headers()['idempotency-key'])).id,batch.id);
    const same=await h.request(fin,'POST','/admin/cod/batches/'+batch.id+'/verify',{actual_fen:batch.expected_fen,reason_code:'COUNTED'});assert.equal(same.status,409);
-   const verify={actual_fen:batch.expected_fen,reason_code:'COUNTED'};await tab(fin2,'COD 财务');await fin2.page.getByLabel('批次号',{exact:true}).fill(batch.id);await fin2.page.getByLabel('实际清点金额（分）',{exact:true}).fill(String(batch.expected_fen));await fin2.page.getByLabel('复点原因码',{exact:true}).fill('COUNTED');response=fin2.page.waitForResponse(r=>r.url().endsWith('/'+batch.id+'/verify'));await fin2.page.getByTestId('verify-cod-batch').click();result=await response;assert.equal(result.status(),200);assert.equal((await result.json()).status,'VERIFIED');await call(fin2,'POST','/admin/cod/batches/'+batch.id+'/verify',verify,200,result.request().headers()['idempotency-key']);for(const w of [1440,390])await h.shot(fin2,'finance-verified',w);
+   const verify={actual_fen:batch.expected_fen,reason_code:'COUNTED'};await tab(fin2,'COD 财务');await fin2.page.getByLabel('批次号',{exact:true}).fill(batch.id);await fin2.page.getByLabel('实际清点金额（块）',{exact:true}).fill((batch.expected_fen / 100).toFixed(2));await fin2.page.getByLabel('复点原因码',{exact:true}).fill('COUNTED');response=fin2.page.waitForResponse(r=>r.url().endsWith('/'+batch.id+'/verify'));await fin2.page.getByTestId('verify-cod-batch').click();result=await response;assert.equal(result.status(),200);assert.equal((await result.json()).status,'VERIFIED');await call(fin2,'POST','/admin/cod/batches/'+batch.id+'/verify',verify,200,result.request().headers()['idempotency-key']);for(const w of [1440,390])await h.shot(fin2,'finance-verified',w);
    await selectAdmin(delivered);response=admin.page.waitForResponse(r=>r.url().endsWith('/'+delivered.id+'/refund'));await admin.page.getByTestId('refund').click();result=await response;assert.equal(result.status(),201);const refund=await result.json();await tab(fin,'退款');await fin.page.getByLabel('退款审批原因码',{exact:true}).fill('APPROVED');response=fin.page.waitForResponse(r=>r.url().endsWith('/'+refund.id+'/approve'));await fin.page.getByTestId('approve-refund-'+refund.id).click();result=await response;assert.equal(result.status(),200);const approved=await result.json();assert.equal(approved.status,'REFUND_PENDING');assert.equal((await h.control('snapshot')).payouts,0);
    await tab(fin2,'退款');await fin2.page.getByLabel('实际 COD 兑付凭证号',{exact:true}).fill('P06_SYNTHETIC_RECEIPT');response=fin2.page.waitForResponse(r=>r.url().endsWith('/'+refund.id+'/record-cod-payout'));await fin2.page.getByTestId('payout-refund-'+refund.id).click();result=await response;assert.equal(result.status(),200);assert.equal((await result.json()).status,'REFUNDED');await call(fin2,'POST','/admin/refunds/'+refund.id+'/record-cod-payout',{receipt_reference:'P06_SYNTHETIC_RECEIPT'},200,result.request().headers()['idempotency-key']);
    const counts=await h.control('snapshot');assert.equal(counts.verified_batches,1);assert.equal(counts.payouts,1);assert.equal(counts.wallet.BalanceMismatches,0);assert.equal(counts.cod.DifferenceFen,'0');
@@ -122,6 +144,76 @@ test('P06 LOCAL REAL: compiled entries → Go identity/API/worker → isolated P
   });
   await scenario('UI-02 [NETWORK FAULT INJECTION]','offline read shows recovery and preserves shopping choice',async()=>{
    const a=await h.actor('buyer9','user');await a.page.getByTestId('add-'+h.info.sku).click();await a.context.setOffline(true);await a.page.getByRole('button',{name:'刷新商品',exact:true}).click();await a.page.getByRole('alert').waitFor();await a.context.setOffline(false);await a.page.getByRole('button',{name:'刷新商品',exact:true}).click();await a.page.getByRole('button',{name:/^购物袋/}).click();assert.ok(await a.page.getByText('手账燕麦饼干 · 单袋',{exact:true}).count());assert.ok(await a.page.getByRole('radio',{name:'货到付款',exact:true}).isChecked());for(const w of [1440,390])await h.shot(a,'offline-recovered',w);
+  });
+  await scenario('ORDER-BATCH','merchant limits, mixed claims, payment badges and paid-only batch delivery',async()=>{
+   const buyer=await h.actor('buyer13','user');
+   const first=[
+    await apiOrder(buyer,{method:'COD'}),
+    await apiOrder(buyer,{method:'BALANCE'}),
+    await apiOrder(buyer,{method:'BALANCE'}),
+   ];
+   const extra=await apiOrder(buyer,{method:'COD'});
+   await tab(admin,'接单设置');
+   await admin.page.getByLabel('商家每次最多接单').fill('3');
+   await admin.page.getByLabel('每位骑手手上最多订单').fill('3');
+   await admin.page.getByTestId('save-order-limits').click();
+   await admin.page.getByRole('status').filter({hasText:'接单上限已更新'}).waitFor();
+   await tab(admin,'订单履约');
+   const merchantCheck=o=>admin.page.getByTestId('merchant-order-'+o.id).getByRole('checkbox',{name:'选择订单'});
+   const merchantBatch=async(action,list)=>{
+    for(const order of list)await merchantCheck(order).check();
+    await admin.page.getByTestId('merchant-batch-'+action).click();
+    await admin.page.getByRole('status').filter({hasText:`已${action==='accept'?'接单':'出餐'} ${list.length} 单`}).waitFor();
+   };
+   for(const order of first)await merchantCheck(order).check();
+   assert.ok(await merchantCheck(extra).isDisabled());
+   await admin.page.getByTestId('merchant-batch-accept').click();
+   await admin.page.getByRole('status').filter({hasText:'已接单 3 单'}).waitFor();
+   await merchantBatch('ready',first);
+   const {items:initialTasks}=await call(rider,'GET','/rider/tasks');
+   assert.equal(initialTasks.length,3);
+   await merchantBatch('accept',[extra]);
+   await merchantBatch('ready',[extra]);
+   const {items:allTasks}=await call(rider,'GET','/rider/tasks');
+   const extraTask=allTasks.find(t=>!initialTasks.some(initial=>initial.id===t.id));
+   assert.ok(extraTask);
+   await rider.page.reload();
+   await rider.page.getByTestId('go-online').click();
+   const riderCard=t=>rider.page.getByTestId('rider-task-'+t.id);
+   const cod=initialTasks.find(t=>t.payment_method==='COD');
+   const paid=initialTasks.filter(t=>t.payment_method==='BALANCE');
+   assert.equal(paid.length,2);
+   await riderCard(cod).getByText('货到付款',{exact:true}).waitFor();
+   await riderCard(paid[0]).getByText('用户已付款',{exact:true}).waitFor();
+   assert.notEqual(await riderCard(cod).evaluate(e=>getComputedStyle(e).backgroundColor),
+    await riderCard(paid[0]).evaluate(e=>getComputedStyle(e).backgroundColor));
+   await rider.page.getByLabel('付款方式').selectOption('COD');
+   assert.equal(await riderCard(paid[0]).count(),0);
+   await rider.page.getByLabel('付款方式').selectOption('ALL');
+   for(const task of initialTasks)await riderCard(task).getByRole('checkbox',{name:'选择接单'}).check();
+   assert.ok(await riderCard(extraTask).getByRole('checkbox',{name:'选择接单'}).isDisabled());
+   for(const width of [1440,390])await h.shot(rider,'batch-rider-hall',width);
+   await rider.page.getByTestId('rider-batch-claim').click();
+   await rider.page.getByRole('status').filter({hasText:'已接单 3 单'}).waitFor();
+   assert.match(await rider.page.getByTestId('rider-capacity').innerText(),/还可接 0 单/);
+   for(const task of initialTasks){
+    await rider.page.getByTestId('task-'+task.id).click();
+    await rider.page.getByTestId('pickup').click();
+    await riderCard(task).getByText('配送中',{exact:true}).waitFor();
+   }
+   assert.equal(await riderCard(cod).getByRole('checkbox',{name:'选择送达'}).count(),0);
+   for(const task of paid)await riderCard(task).getByRole('checkbox',{name:'选择送达'}).check();
+   await rider.page.getByTestId('rider-batch-deliver').click();
+   await rider.page.getByRole('status').filter({hasText:'已送达 2 单'}).waitFor();
+   assert.match(await rider.page.getByTestId('rider-capacity').innerText(),/还可接 2 单/);
+   await rider.page.getByTestId('task-'+cod.id).click();
+   await rider.page.getByLabel('已全额收到货到付款').waitFor();
+   assert.ok(await rider.page.getByTestId('deliver').isDisabled());
+   await rider.page.getByLabel('已全额收到货到付款').check();
+   await rider.page.getByTestId('deliver').click();
+   await rider.page.getByRole('status').filter({hasText:'服务器已确认：送达'}).waitFor();
+   await tab(rider,'站点大厅');
+   assert.ok(await rider.page.getByTestId('claim-'+extraTask.id).isEnabled());
   });
  } finally {await writeFile(resolve(h.evidence,'matrix.json'),JSON.stringify(evidence,null,2));await h.close();}
 });

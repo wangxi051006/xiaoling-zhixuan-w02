@@ -48,7 +48,7 @@ function assertNoMetadata(out){
   assert.equal(existsSync(join(out,'migrations.json')),false,'migrations.json must not be written');
 }
 
-test('approved eight-migration set produces metadata',()=>{
+test('approved migration set produces metadata',()=>{
   const fx=fixture();
   try{
     const result=run(fx);

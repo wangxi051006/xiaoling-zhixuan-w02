@@ -52,7 +52,7 @@ type HTTP struct {
 
 func (h *HTTP) Register(mux *http.ServeMux) {
 	user := []string{"POST /checkout/quote", "POST /orders", "GET /orders", "GET /orders/{id}", "POST /orders/{id}/cancel", "POST /orders/{id}/urge"}
-	admin := []string{"GET /admin/orders", "GET /admin/orders/{id}", "POST /admin/orders/{id}/prepare", "POST /admin/orders/{id}/dispatch", "POST /admin/orders/{id}/reclaim", "POST /admin/orders/{id}/cancel", "POST /admin/orders/{id}/restock", "POST /admin/orders/{id}/return-inspect", "POST /admin/orders/{id}/refund", "GET /admin/dashboard"}
+	admin := []string{"GET /admin/delivery-fee", "PUT /admin/delivery-fee", "GET /admin/orders", "GET /admin/orders/{id}", "POST /admin/orders/{id}/prepare", "POST /admin/orders/{id}/dispatch", "POST /admin/orders/{id}/reclaim", "POST /admin/orders/{id}/cancel", "POST /admin/orders/{id}/restock", "POST /admin/orders/{id}/return-inspect", "POST /admin/orders/{id}/refund", "GET /admin/dashboard"}
 	rider := []string{"PUT /rider/availability", "GET /rider/tasks", "GET /rider/tasks/{id}", "POST /rider/tasks/{id}/claim", "POST /rider/tasks/{id}/pickup", "POST /rider/tasks/{id}/deliver", "POST /rider/tasks/{id}/return", "GET /rider/history", "GET /rider/earnings", "GET /rider/messages", "POST /rider/messages/read"}
 	add := func(route string, entry identity.Entry, mfa bool, roles ...contract.Role) {
 		parts := strings.SplitN(route, " ", 2)
@@ -78,7 +78,16 @@ func (h *HTTP) Register(mux *http.ServeMux) {
 		}
 		add(r, identity.AdminEntry, r == "POST /admin/orders/{id}/refund", roles...)
 	}
+	for _, r := range []string{
+		"GET /admin/order-limits", "PUT /admin/order-limits",
+		"POST /admin/order-batches/accept", "POST /admin/order-batches/ready",
+	} {
+		add(r, identity.AdminEntry, false, contract.RoleOperator)
+	}
 	for _, r := range rider {
+		add(r, identity.RiderEntry, false, contract.RoleRider)
+	}
+	for _, r := range []string{"GET /rider/capacity", "POST /rider/task-batches/claim", "POST /rider/task-batches/deliver"} {
 		add(r, identity.RiderEntry, false, contract.RoleRider)
 	}
 }

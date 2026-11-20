@@ -35,22 +35,25 @@ func addressView(a contract.AddressSnapshot) Address {
 }
 
 type Order struct {
-	ID         string                    `json:"id"`
-	Mode       contract.DeliveryMode     `json:"delivery_mode"`
-	Slot       Slot                      `json:"slot"`
-	Status     contract.OrderStatus      `json:"status"`
-	Stock      contract.StockStatus      `json:"stock_status"`
-	Settlement contract.SettlementStatus `json:"settlement_status"`
-	Method     contract.PaymentMethod    `json:"payment_method"`
-	TotalFen   int64                     `json:"total_fen"`
-	Lines      []PriceLine               `json:"lines"`
-	CreatedAt  time.Time                 `json:"created_at"`
+	ID             string                    `json:"id"`
+	Mode           contract.DeliveryMode     `json:"delivery_mode"`
+	Slot           Slot                      `json:"slot"`
+	Status         contract.OrderStatus      `json:"status"`
+	Stock          contract.StockStatus      `json:"stock_status"`
+	Settlement     contract.SettlementStatus `json:"settlement_status"`
+	Method         contract.PaymentMethod    `json:"payment_method"`
+	SubtotalFen    int64                     `json:"subtotal_fen"`
+	DeliveryFeeFen int64                     `json:"delivery_fee_fen"`
+	TotalFen       int64                     `json:"total_fen"`
+	Lines          []PriceLine               `json:"lines"`
+	CreatedAt      time.Time                 `json:"created_at"`
 }
 type AdminOrder struct {
 	Order
-	Address Address `json:"address"`
-	RiderID *string `json:"rider_id,omitempty"`
-	Overdue bool    `json:"overdue"`
+	Address          Address `json:"address"`
+	RiderID          *string `json:"rider_id,omitempty"`
+	Overdue          bool    `json:"overdue"`
+	MerchantAccepted bool    `json:"merchant_accepted"`
 }
 type orderRow struct {
 	ID, ActorID, StationID string
@@ -58,7 +61,9 @@ type orderRow struct {
 	Method                 contract.PaymentMethod
 	Status                 contract.OrderStatus
 	Stock                  contract.StockStatus
+	MerchantAccepted       bool
 	TotalFen, FeeFen       int64
+	CODCommissionBPS       int64
 	ItemCount              int32
 	Address                contract.AddressSnapshot
 	Slot                   contract.SlotSnapshot
@@ -79,7 +84,8 @@ func readOrder(ctx context.Context, tx pgx.Tx, station, id string, lock bool) (o
 		suffix = " FOR UPDATE"
 	}
 	var a, sl []byte
-	err = tx.QueryRow(ctx, `SELECT id,actor_id,station_id,mode,method,status,stock_status,total_fen,fee_fen,item_count,address_snapshot,slot_snapshot,created_at,overdue,last_urge_at FROM orders WHERE station_id=$1 AND id=$2`+suffix, station, id).Scan(&o.ID, &o.ActorID, &o.StationID, &o.Mode, &o.Method, &o.Status, &o.Stock, &o.TotalFen, &o.FeeFen, &o.ItemCount, &a, &sl, &o.CreatedAt, &o.Overdue, &o.LastUrge)
+	err = tx.QueryRow(ctx, `SELECT id,actor_id,station_id,mode,method,status,stock_status,total_fen,fee_fen,item_count,address_snapshot,slot_snapshot,created_at,overdue,last_urge_at,
+		(merchant_accepted_at IS NOT NULL OR stock_status='SORTED'),cod_commission_bps FROM orders WHERE station_id=$1 AND id=$2`+suffix, station, id).Scan(&o.ID, &o.ActorID, &o.StationID, &o.Mode, &o.Method, &o.Status, &o.Stock, &o.TotalFen, &o.FeeFen, &o.ItemCount, &a, &sl, &o.CreatedAt, &o.Overdue, &o.LastUrge, &o.MerchantAccepted, &o.CODCommissionBPS)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return o, ErrNotFound
 	}
@@ -100,7 +106,11 @@ func (s *Service) Order(ctx context.Context, tx pgx.Tx, actor identity.Session, 
 	if !admin && o.ActorID != actor.AccountID {
 		return Order{}, ErrNotFound
 	}
-	out := Order{ID: o.ID, Mode: o.Mode, Slot: slotView(o.Slot), Status: o.Status, Stock: o.Stock, Method: o.Method, TotalFen: o.TotalFen, CreatedAt: o.CreatedAt.UTC(), Lines: []PriceLine{}}
+	out := Order{
+		ID: o.ID, Mode: o.Mode, Slot: slotView(o.Slot), Status: o.Status, Stock: o.Stock, Method: o.Method,
+		SubtotalFen: o.TotalFen - o.FeeFen, DeliveryFeeFen: o.FeeFen, TotalFen: o.TotalFen,
+		CreatedAt: o.CreatedAt.UTC(), Lines: []PriceLine{},
+	}
 	err = tx.QueryRow(ctx, `SELECT state FROM settlements WHERE order_id=$1`, id).Scan(&out.Settlement)
 	if err != nil {
 		return out, err
@@ -128,7 +138,7 @@ func (s *Service) adminOrder(ctx context.Context, tx pgx.Tx, actor identity.Sess
 	if err != nil {
 		return AdminOrder{}, err
 	}
-	out := AdminOrder{Order: o, Address: addressView(row.Address), Overdue: row.Overdue}
+	out := AdminOrder{Order: o, Address: addressView(row.Address), Overdue: row.Overdue, MerchantAccepted: row.MerchantAccepted}
 	err = tx.QueryRow(ctx, `SELECT rider_id FROM delivery_tasks WHERE order_id=$1`, id).Scan(&out.RiderID)
 	if errors.Is(err, pgx.ErrNoRows) {
 		err = nil
@@ -139,6 +149,7 @@ func (s *Service) event(ctx context.Context, tx pgx.Tx, actor identity.Session, 
 	_, err := tx.Exec(ctx, `INSERT INTO order_events(order_id,actor_id,kind,reason_code,recorded_at) VALUES($1,$2,$3,NULLIF($4,''),$5)`, id, actor.AccountID, kind, reason, s.Clock.Now().UTC())
 	return err
 }
+
 // notify only records an outbox row; it never calls a mail server here.
 func (s *Service) notify(ctx context.Context, tx pgx.Tx, kind string, o orderRow) error {
 	if s.EmailNotifier == nil {

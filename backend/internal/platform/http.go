@@ -41,9 +41,18 @@ func writeJSON(w http.ResponseWriter, status int, value any) {
 	_ = json.NewEncoder(w).Encode(value)
 }
 
-func NewHandler(api *http.ServeMux, ready func(context.Context) error, logger *slog.Logger, maxBody int64) http.Handler {
+type BodyLimit struct {
+	Pattern string
+	Bytes   int64
+}
+
+func NewHandler(api *http.ServeMux, ready func(context.Context) error, logger *slog.Logger, maxBody int64, overrides ...BodyLimit) http.Handler {
 	if maxBody <= 0 {
 		maxBody = DefaultBodyLimit
+	}
+	limits := make(map[string]int64, len(overrides))
+	for _, limit := range overrides {
+		limits[limit.Pattern] = limit.Bytes
 	}
 	if logger == nil {
 		logger = slog.New(slog.DiscardHandler)
@@ -61,7 +70,7 @@ func NewHandler(api *http.ServeMux, ready func(context.Context) error, logger *s
 					WriteError(res, r, 500, "INTERNAL_ERROR", "Internal server error")
 				}
 			}()
-			serve(res, r, api, ready, maxBody)
+			serve(res, r, api, ready, maxBody, limits)
 		}()
 		for k, values := range res.header {
 			w.Header()[k] = values
@@ -79,7 +88,7 @@ func NewHandler(api *http.ServeMux, ready func(context.Context) error, logger *s
 	})
 }
 
-func serve(w http.ResponseWriter, r *http.Request, api *http.ServeMux, ready func(context.Context) error, maxBody int64) {
+func serve(w http.ResponseWriter, r *http.Request, api *http.ServeMux, ready func(context.Context) error, maxBody int64, limits map[string]int64) {
 	if (r.URL.Path == "/healthz" || r.URL.Path == "/readyz") && r.Method == http.MethodGet && localRequest(r) {
 		if r.URL.Path == "/readyz" {
 			ctx, cancel := context.WithTimeout(r.Context(), 2*time.Second)
@@ -100,6 +109,9 @@ func serve(w http.ResponseWriter, r *http.Request, api *http.ServeMux, ready fun
 	if pattern == "" {
 		WriteError(w, r, 404, "NOT_FOUND", "Not found")
 		return
+	}
+	if limit := limits[pattern]; limit > 0 {
+		maxBody = limit
 	}
 	if r.ContentLength > maxBody {
 		WriteError(w, r, 413, "BODY_TOO_LARGE", "Request body too large")

@@ -13,8 +13,8 @@ const { startHarness } = await import(pathToFileURL(resolve('tests/p06-harness.m
 // batch has no difference at all rather than a zero one.
 const scenarios = [
   { name: 'unverified', amount: null, status: 'IN_BATCH', delta: null, label: '尚未复点', ledgerFen: 0, countedFen: '0' },
-  { name: 'short-paid', amount: 990, status: 'DISCREPANCY', delta: 10, label: '少缴 ¥0.10', ledgerFen: 10, countedFen: '990' },
-  { name: 'over-paid', amount: 1010, status: 'DISCREPANCY', delta: -10, label: '多缴 ¥0.10', ledgerFen: -10, countedFen: '1010' },
+  { name: 'short-paid', amount: 990, status: 'DISCREPANCY', delta: 10, label: '少缴 0.1 块', ledgerFen: 10, countedFen: '990' },
+  { name: 'over-paid', amount: 1010, status: 'DISCREPANCY', delta: -10, label: '多缴 0.1 块', ledgerFen: -10, countedFen: '1010' },
   { name: 'balanced', amount: 1000, status: 'VERIFIED', delta: 0, label: '已对平', ledgerFen: 0, countedFen: '1000' },
 ];
 
@@ -70,7 +70,7 @@ for (const scenario of scenarios) {
         await call(maker, 'POST', '/admin/cod/batches/' + batch.id + '/verify', { actual_fen: scenario.amount, reason_code: 'COUNTED' }, 409);
         await checker.page.getByRole('button', { name: 'COD 财务', exact: true }).click();
         await checker.page.getByLabel('批次号', { exact: true }).fill(batch.id);
-        await checker.page.getByLabel('实际清点金额（分）', { exact: true }).fill(String(scenario.amount));
+        await checker.page.getByLabel('实际清点金额（块）', { exact: true }).fill((scenario.amount / 100).toFixed(2));
         await checker.page.getByLabel('复点原因码', { exact: true }).fill('COUNTED');
         const verification = checker.page.waitForResponse(r => new URL(r.url()).pathname.endsWith('/' + batch.id + '/verify'));
         await checker.page.getByTestId('verify-cod-batch').click();
@@ -119,7 +119,7 @@ for (const scenario of scenarios) {
         await label.getByText(scenario.label, { exact: true }).waitFor();
         seen.push((await label.textContent()).trim());
         if (scenario.delta !== null) {
-          assert.equal(await result.getByText('¥-' + (Math.abs(scenario.delta) / 100).toFixed(2), { exact: false }).count(), 0, 'the reversed sign must not appear in the result card');
+          assert.equal(await result.getByText('-' + Math.abs(scenario.delta) / 100 + ' 块', { exact: false }).count(), 0, 'the reversed sign must not appear in the result card');
         }
       }
       assert.deepEqual(seen, [scenario.label, scenario.label], 'both viewports show the same label and amount');

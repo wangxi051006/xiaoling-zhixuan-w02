@@ -66,6 +66,15 @@ try {
   await check('untrusted forwarding headers overwritten', async () => { const r = await probe('user', '/api/v1/probe', { headers: { Forwarded: 'for=192.0.2.1;host=evil.test', 'X-Forwarded-For': '192.0.2.1', 'X-Forwarded-Proto': 'http', 'X-Forwarded-Origin': 'https://evil.test' } }); const body = JSON.parse(r.body); assert.equal(body.forwarded, undefined); assert.equal(body.forwardedOrigin, undefined); assert.equal(body.xff, '127.0.0.1'); assert.equal(body.proto, 'https'); });
   await check('admin fails closed for unapproved direct peer', async () => { assert.equal((await probe('admin', '/', { localAddress: '127.0.0.2', headers: { 'X-Forwarded-For': '127.0.0.1' } })).status, 403); });
   await check('request body limit', async () => assert.equal((await probe('user', '/api/v1/probe', { body: 'x'.repeat(65537), headers: { 'Content-Type': 'application/json' } })).status, 413));
+  await check('product image upload accepts up to 5 MiB', async () => {
+    const path = '/api/v1/admin/product-images';
+    const headers = { 'Content-Type': 'image/png' };
+    const limit = 5 * 1024 * 1024;
+    const allowed = await probe('admin', path, { body: 'x'.repeat(limit), headers });
+    assert.equal(allowed.status, 200);
+    assert.equal(JSON.parse(allowed.body).size, limit);
+    assert.equal((await probe('admin', path, { body: 'x'.repeat(limit + 1), headers })).status, 413);
+  });
   await check('access and upstream error logs suppress PII, URI and authentication', async () => { const extra = { headers: { Authorization: `Bearer ${logMarker}`, Cookie: `sid=${logMarker}`, 'X-Person': logMarker } }; const markedPath = '/api/v1/probe?token=' + logMarker; await probe('user', markedPath, extra); await new Promise(r => upstream.close(r)); assert.equal((await probe('user', markedPath, extra)).status, 502); await new Promise(r => setTimeout(r, 200)); assert.ok(!output.includes(logMarker), 'log leaked synthetic sensitive marker'); const lines = output.split(/\r?\n/).filter(Boolean).map(line => { try { return JSON.parse(line); } catch { return {}; } }); const access = lines.filter(line => String(line.logger).startsWith('http.log.access')); assert.ok(access.length > 0, 'no access log observed'); assert.ok(access.every(line => !('request' in line) && !('resp_headers' in line))); assert.ok(lines.some(line => String(line.logger).startsWith('http.log.error')), 'no upstream error log observed'); });
   console.log(JSON.stringify({ status: 'PASS', passed: results.length, failed: 0, results }, null, 2));
 } catch (error) {

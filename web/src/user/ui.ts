@@ -1,4 +1,4 @@
-import { h, ref, watch, type VNodeChild } from 'vue';
+import { h, onMounted, ref, watch, type VNodeChild } from 'vue';
 import { apiRequest, ApiError } from '../shared/api.ts';
 import type { Me, Role } from '../shared/generated.ts';
 import './style.css';
@@ -15,32 +15,51 @@ export const labels:Record<string,string>={SCHEDULED:'预约待备货',PREPARING
 export const stateText=(s:string)=>labels[s]||s;
 export const btn=(label:string,fn:()=>unknown,disabled=false,testid?:string,kind='')=>h('button',{type:'button',onClick:fn,disabled,'data-testid':testid,class:`btn ${kind}`},label);
 export const field=(label:string,value:string|number,onChange:(v:string)=>void,type='text',props:Record<string,unknown>={})=>h('label',{class:'field'},[h('span',label),h('input',{type,value,onInput:(e:Event)=>onChange(text(e)),...props})]);
-export const select=(label:string,value:string,options:Array<[string,string,boolean?]>,change:(v:string)=>void)=>h('label',{class:'field','data-sensitive':label==='配送地址'?true:undefined},[h('span',label),h('select',{value,'aria-label':label,onChange:(e:Event)=>change(text(e))},options.map(([v,t,disabled])=>h('option',{value:v,disabled},t)))]);
-export const check=(label:string,value:boolean,change:(v:boolean)=>void)=>h('label',{class:'check'},[h('input',{type:'checkbox',checked:value,onChange:(e:Event)=>change(checked(e))}),label]);
+export const select=(label:string,value:string,options:Array<[string,string,boolean?]>,change:(v:string)=>void,props:Record<string,unknown>={})=>h('label',{class:'field','data-sensitive':label==='配送地址'?true:undefined},[h('span',label),h('select',{value,'aria-label':label,onChange:(e:Event)=>change(text(e)),...props},options.map(([v,t,disabled])=>h('option',{value:v,disabled},t)))]);
+export const check=(label:string,value:boolean,change:(v:boolean)=>void,disabled=false)=>h('label',{class:'check'},[h('input',{type:'checkbox',checked:value,onChange:(e:Event)=>change(checked(e)),disabled}),label]);
 export const card=(title:string,children:VNodeChild[],props:Record<string,unknown>={})=>h('section',{class:'card',...props},[h('h2',title),...children]);
 export const empty=(label='暂无记录')=>h('p',{class:'empty'},label);
 export const badge=(s:string)=>h('span',{class:'badge'},stateText(s));
 export const form=(children:VNodeChild[],submit:()=>unknown)=>h('form',{onSubmit:(e:Event)=>{e.preventDefault();void submit();}},children);
 
-type Pending={path:string;method:'POST'|'PUT'|'PATCH'|'DELETE';body:unknown;key:string;actor:string;done:(result:any)=>unknown;checked:boolean};
-export function session(roles:Role[],refresh:()=>Promise<unknown>){
+type Pending={path:string;method:'POST'|'PUT'|'PATCH'|'DELETE';body:unknown;key:string;actor:string;done:(result:any)=>unknown;checked:boolean;onConflict?:(error:ApiError)=>Promise<void>};
+export function session(roles:Role[],refresh:()=>Promise<unknown>,errorMessage?:(error:ApiError)=>string|undefined){
  const me=ref<Me>();const error=ref('');const notice=ref('');const busy=ref(false);const pending=ref<Pending>();const ready=ref(false);let epoch=0;
  watch(()=>sessionKey(me.value),(value,prior)=>{if(value!==prior){epoch++;pending.value=undefined;}},{flush:'sync'});
  watch(()=>me.value?.csrf_token,(value,prior)=>{if(value&&prior&&value!==prior)epoch++;},{flush:'sync'});
  function failure(e:unknown){
    if(e instanceof DOMException&&e.name==='AbortError')return;
-   if(e instanceof ApiError){error.value=`${e.code}：${e.message}${e.requestId?`（请求 ${e.requestId}）`:''}`;if(e.status===401){me.value=undefined;ready.value=false;pending.value=undefined;error.value+='。会话已失效，请重新登录。';}if(e.status===403)error.value+='。操作被拒绝，请检查角色或通过员工登录完成近期 MFA。';}
+   if(e instanceof ApiError){const message=errorMessage?.(e);error.value=`${message?`${message}（${e.code}）`:`${e.code}：${e.message}`}${e.requestId?`（请求 ${e.requestId}）`:''}`;if(e.status===401){me.value=undefined;ready.value=false;pending.value=undefined;error.value+='。会话已失效，请重新登录。';}if(e.status===403)error.value+='。操作被拒绝，请检查角色或通过员工登录完成近期 MFA。';}
    else error.value='网络连接中断或结果未知，请核对服务器状态后重试。';
  }
  async function get<T>(path:string,signal?:AbortSignal):Promise<T>{const token=epoch,controller=new AbortController();const timeout=setTimeout(()=>controller.abort(new DOMException('请求超时，结果未知','TimeoutError')),15000);try{const value=await apiRequest<T>(path,{signal:signal?AbortSignal.any([signal,controller.signal]):controller.signal});if(token!==epoch)throw new DOMException('会话已改变，忽略旧响应','AbortError');return value;}catch(e){if(token!==epoch)throw new DOMException('会话已改变，忽略旧错误','AbortError');if(!(e instanceof DOMException&&e.name==='AbortError'))failure(e);throw e;}finally{clearTimeout(timeout);}}
  async function list<T extends {items:unknown[];next_cursor:string|null}>(path:string,signal?:AbortSignal):Promise<T>{const first=await get<T>(path,signal);const items=[...first.items];const seen=new Set<string>();let cursor=first.next_cursor;while(cursor){if(seen.has(cursor))throw new ApiError(500,'INTERNAL_ERROR','列表游标重复，请刷新重试');seen.add(cursor);const next=new URL(path,'https://local.invalid');next.searchParams.set('cursor',cursor);const page=await get<T>(next.pathname+next.search,signal);items.push(...page.items);cursor=page.next_cursor;}return {...first,items,next_cursor:null} as T;}
  async function recover(showAuthError=false){error.value='';try{const result=await get<Me>('/me');if(!result.roles.some(r=>roles.includes(r))){me.value=undefined;error.value='FORBIDDEN：此账号没有当前入口所需权限。';return;}me.value=result;ready.value=true;await refresh();}catch(e){if(!showAuthError&&e instanceof ApiError&&e.status===401)error.value='';}}
  async function run(fn:()=>Promise<unknown>){if(busy.value)return;const token=epoch;busy.value=true;error.value='';notice.value='';try{await fn();}catch(e){if(token===epoch)failure(e);}finally{busy.value=false;}}
- async function execute(p:Pending){let result:unknown;const token=epoch,controller=new AbortController();const timeout=setTimeout(()=>controller.abort(new DOMException('请求超时，结果未知','TimeoutError')),15000);try{result=await apiRequest(p.path,{method:p.method,body:p.body,csrf:me.value?.csrf_token,idempotencyKey:p.key,signal:controller.signal});if(sessionKey(me.value)!==p.actor)throw new DOMException('会话已改变，忽略旧响应','AbortError');}catch(e){if(sessionKey(me.value)!==p.actor)throw new DOMException('会话已改变，忽略旧错误','AbortError');const ambiguous=!(e instanceof ApiError)||e.status>=500||(e.status>=200&&e.status<300);if(ambiguous&&!(e instanceof DOMException&&e.name==='AbortError')){pending.value=p;p.checked=false;}else if(token===epoch)pending.value=undefined;if(token!==epoch)throw new DOMException('凭据已更新，保留待核对操作并忽略旧凭据错误','AbortError');throw e;}finally{clearTimeout(timeout);}pending.value=undefined;await p.done(result);}
- async function write<T>(path:string,body:unknown,done:(result:T)=>unknown,method:Pending['method']='POST'){
+ async function execute(p:Pending){
+  let result:unknown;
+  const token=epoch,controller=new AbortController();
+  const timeout=setTimeout(()=>controller.abort(new DOMException('请求超时，结果未知','TimeoutError')),15000);
+  try{
+   result=await apiRequest(p.path,{method:p.method,body:p.body,csrf:me.value?.csrf_token,idempotencyKey:p.key,signal:controller.signal});
+   if(sessionKey(me.value)!==p.actor)throw new DOMException('会话已改变，忽略旧响应','AbortError');
+  }catch(e){
+   if(sessionKey(me.value)!==p.actor)throw new DOMException('会话已改变，忽略旧错误','AbortError');
+   const ambiguous=!(e instanceof ApiError)||e.status>=500||(e.status>=200&&e.status<300);
+   if(ambiguous&&!(e instanceof DOMException&&e.name==='AbortError')){pending.value=p;p.checked=false;}
+   else if(token===epoch)pending.value=undefined;
+   if(token!==epoch)throw new DOMException('凭据已更新，保留待核对操作并忽略旧凭据错误','AbortError');
+   if(e instanceof ApiError&&e.status===409)await p.onConflict?.(e);
+   throw e;
+  }finally{clearTimeout(timeout);}
+  pending.value=undefined;
+  await p.done(result);
+ }
+ async function write<T>(path:string,body:unknown,done:(result:T)=>unknown,method:Pending['method']='POST',onConflict?:Pending['onConflict']){
   if(pending.value){error.value='请先核对并处理上一笔结果未知的操作。';return;}
   if(!me.value){error.value='请先恢复会话或登录。';return;}
-  const actor=sessionKey(me.value);await run(()=>execute({path,body:body===undefined?undefined:JSON.parse(JSON.stringify(body)),method,key:crypto.randomUUID(),actor,done,checked:false}));
+  const actor=sessionKey(me.value);
+  await run(()=>execute({path,body:body===undefined?undefined:JSON.parse(JSON.stringify(body)),method,key:crypto.randomUUID(),actor,done,checked:false,onConflict}));
  }
  function status(){return h('div',{class:'feedback'},[
   error.value?h('p',{role:'alert',class:'error'},error.value):null,notice.value?h('p',{role:'status'},notice.value):null,
@@ -50,4 +69,33 @@ export function session(roles:Role[],refresh:()=>Promise<unknown>){
  function tools(){return h('div',{class:'session'},[me.value?h('span',{'data-testid':'session-ready'},`站点 ${me.value.station_id} · ${me.value.roles.join(' / ')}`):h('span','尚未登录'),btn('恢复会话',()=>recover(true),busy.value,'recover-session'),me.value?btn('退出登录',()=>write('/auth/logout',undefined,()=>{me.value=undefined;ready.value=false;notice.value='已退出登录';}),busy.value):null,h('a',{href:'/api/v1/auth/staff/start'},'员工登录 / MFA')]);}
  return {me,error,notice,busy,pending,ready,get,list,recover,run,write,failure,status,tools};
 }
+export function localTestLogin(entry: 'user' | 'rider' | 'admin', s: ReturnType<typeof session>) {
+ const enabled = ref(false), account = ref(''), password = ref('');
+ const path = '/auth/test/login';
+ onMounted(async () => {
+  if (location.hostname !== `${entry}.localhost`) return;
+  try {
+   const result = await apiRequest<{entry: string}>(path, {signal: AbortSignal.timeout(5000)});
+   enabled.value = result?.entry === entry;
+  } catch { /* Test mode is unavailable; keep the normal sign-in options. */ }
+ });
+ watch(s.me, value => { if (value) { account.value = ''; password.value = ''; } });
+ return () => enabled.value && !s.me.value ? card('本地测试登录', [form([
+  field('账号', account.value, v => account.value = v, 'text', {required: true, inputmode: 'numeric', autocomplete: 'username', maxlength: 64, disabled: s.busy.value}),
+  field('密码', password.value, v => password.value = v, 'password', {required: true, autocomplete: 'off', maxlength: 64, disabled: s.busy.value, 'data-sensitive': true}),
+  h('button', {type: 'submit', class: 'btn primary', disabled: s.busy.value || !account.value || !password.value}, '测试登录'),
+ ], () => s.run(async () => {
+  const body = {account: account.value.trim(), password: password.value};
+  password.value = '';
+  try {
+   await apiRequest<void>(path, {method: 'POST', body, signal: AbortSignal.timeout(10000)});
+  } catch (e) {
+   if (e instanceof ApiError && e.status === 401) { s.error.value = '账号或密码不正确。'; return; }
+   throw e;
+  }
+  await s.recover();
+  if (!s.me.value && !s.error.value) s.error.value = '未能恢复测试会话，请重新登录。';
+ }))], {'data-testid': 'test-login'}) : null;
+}
+
 export function shell(role:string,title:string,tabs:VNodeChild,body:VNodeChild,tools:VNodeChild,status:VNodeChild){return h('main',{'data-entry':role,class:`app ${role}`},[h('header',{class:'masthead'},[h('div',{class:'brand'},[h('span',{class:'logo','aria-hidden':'true'},'零'),h('div',[h('small','校零智选 · 校园生活手账'),h('h1',title)])]),tools]),h('nav',{'aria-label':'主要功能',class:'tabs'},[tabs]),status,h('div',{class:'content'},[body]),h('footer','校零智选 · 时间按 Asia/Shanghai 显示 · 订单状态以服务器为准')]);}

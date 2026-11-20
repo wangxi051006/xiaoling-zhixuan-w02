@@ -82,6 +82,23 @@ func (s *Directory) ResolveAddress(ctx context.Context, tx pgx.Tx, accountID, ad
 	return scanAddress(tx.QueryRow(ctx, `SELECT `+addressColumns+addressFrom+` AND d.id=$2 AND b.enabled FOR SHARE OF d,b,a`, accountID, addressID))
 }
 
+type ServiceBuilding struct {
+	ID   string `json:"id"`
+	Name string `json:"name"`
+}
+
+func (s *Directory) ListServiceBuildings(ctx context.Context, stationID, cursor string, limit int) ([]ServiceBuilding, error) {
+	if limit < 1 || limit > 101 {
+		return nil, ErrAddressInput
+	}
+	rows, err := s.pool.Query(ctx, `SELECT id,name FROM service_buildings
+		WHERE station_id=$1 AND enabled AND id>$2 ORDER BY id LIMIT $3`, stationID, cursor, limit)
+	if err != nil {
+		return nil, err
+	}
+	return pgx.CollectRows(rows, pgx.RowToStructByPos[ServiceBuilding])
+}
+
 func (s *Directory) ListAddresses(ctx context.Context, accountID, stationID, cursor string, limit int) ([]contract.AddressSnapshot, error) {
 	if limit < 1 || limit > 101 {
 		return nil, ErrAddressInput

@@ -35,8 +35,10 @@ for (const role of ['user','rider','admin']) test(`MOCK ${role}: accessible entr
       else if(path==='/orders'&&req.method()==='POST'){created=true;value=order;}
       else if(path==='/orders')value={items:created?[order]:[],next_cursor:null};
       else if(path==='/orders/order-1')value=order;
-      else if(path==='/rider/tasks')value={items:taskStage==='DELIVERED'?[]:[{id:'task-1',building_name:'一号楼',item_count:1,fee_fen:100,slot,order_status:taskStage}],next_cursor:null};
-      else if(path.startsWith('/rider/tasks/task-1')){if(path.endsWith('/claim'))taskStage='AWAITING_PICKUP';if(path.endsWith('/pickup'))taskStage='IN_DELIVERY';if(path.endsWith('/deliver'))taskStage='DELIVERED';value={id:'task-1',building_name:'一号楼',item_count:1,fee_fen:100,slot,order_status:taskStage,address:{building_name:'一号楼',building_id:'b1',room:'101',contact_name:'合成人',contact_phone:'13800000000'}};}
+      else if(path==='/rider/tasks')value={items:taskStage==='DELIVERED'?[]:[{id:'task-1',building_name:'一号楼',item_count:1,fee_fen:100,slot,order_status:taskStage,payment_method:'COD'}],next_cursor:null};
+      else if(path.startsWith('/rider/tasks/task-1')){if(path.endsWith('/claim'))taskStage='AWAITING_PICKUP';if(path.endsWith('/pickup'))taskStage='IN_DELIVERY';if(path.endsWith('/deliver'))taskStage='DELIVERED';value={id:'task-1',building_name:'一号楼',item_count:1,fee_fen:100,slot,order_status:taskStage,payment_method:'COD',...(taskStage==='IN_DELIVERY'?{cod_due_fen:500}:{}),address:{building_name:'一号楼',building_id:'b1',room:'101',contact_name:'合成人',contact_phone:'13800000000'}};}
+      else if(path==='/rider/capacity')value={active:0,limit:8,remaining:8};
+      else if(path==='/admin/order-limits')value={merchant_batch_limit:15,rider_active_limit:8,version:1};
       else if(path==='/rider/availability')value={available:true};
       else if(path==='/admin/dashboard')value={local_date:'2026-11-19',order_count:1,delivered_count:0,net_collected_fen:0,overdue_count:0};
       else if(path==='/admin/orders')value={items:[{...order,address:{building_name:'一号楼',building_id:'b1',room:'101',contact_name:'合成人',contact_phone:'13800000000'},overdue:false}],next_cursor:null};

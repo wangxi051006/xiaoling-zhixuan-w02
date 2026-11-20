@@ -8,21 +8,21 @@ import (
 	"testing"
 )
 
-func TestP05CODRefusalAllDamagedReturnRetainsGuardUntilInspection(t *testing.T) {
+func TestP05CODRefusalAllDamagedReturnKeepsSettlementIndependent(t *testing.T) {
 	f := setup(t)
 	id := f.order("buyer", "ASAP", "COD")
 	task := f.pickup(id)
 	f.call("r1", "POST", "/rider/tasks/"+task+"/return", `{"reason_code":"REFUSED"}`, 200)
-	q := f.quote("buyer", "ASAP", "COD")
-	f.call("buyer", "POST", "/orders", fmt.Sprintf(`{"quote_id":%q}`, q), 409)
-	if f.n(`SELECT count(*) FROM cod_receipts`) != 0 || f.n(`SELECT count(*) FROM rider_earnings`) != 0 || f.n(`SELECT count(*) FROM settlements WHERE state='COD_UNCOLLECTED'`) != 1 {
+	secondID := f.order("buyer", "ASAP", "COD")
+	if f.n(`SELECT count(*) FROM cod_receipts`) != 0 || f.n(`SELECT count(*) FROM rider_earnings`) != 0 || f.n(`SELECT count(*) FROM settlements WHERE state='COD_UNCOLLECTED'`) != 2 {
 		t.Fatal("refusal fabricated cash, income or early reversal")
 	}
 	f.call("op", "POST", "/admin/orders/"+id+"/return-inspect", `{"reason_code":"ALL_DAMAGED","sellable":[]}`, 200)
-	if f.n(`SELECT on_hand FROM inventory`) != 99 || f.n(`SELECT reserved FROM inventory`) != 0 || f.n(`SELECT count(*) FROM settlements WHERE state='VOID'`) != 1 {
-		t.Fatal("all damaged inspection failed to close stock/settlement")
+	if f.n(`SELECT on_hand FROM inventory`) != 99 || f.n(`SELECT reserved FROM inventory`) != 1 ||
+		f.n(`SELECT count(*) FROM settlements WHERE order_id=$1 AND state='VOID'`, id) != 1 ||
+		f.n(`SELECT count(*) FROM settlements WHERE order_id=$1 AND state='COD_UNCOLLECTED'`, secondID) != 1 {
+		t.Fatal("return inspection did not close only the returned order's stock and settlement")
 	}
-	f.call("buyer", "POST", "/orders", fmt.Sprintf(`{"quote_id":%q}`, q), 201)
 }
 func TestP05SuccessfulOwnerAdminReadsAndPreHandoffRefundCancellation(t *testing.T) {
 	for _, method := range []string{"COD", "BALANCE"} {

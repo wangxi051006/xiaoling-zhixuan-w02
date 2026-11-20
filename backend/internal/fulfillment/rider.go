@@ -15,26 +15,26 @@ import (
 )
 
 type Task struct {
-	ID           string               `json:"id"`
-	BuildingName string               `json:"building_name"`
-	ItemCount    int32                `json:"item_count"`
-	FeeFen       int64                `json:"fee_fen"`
-	Slot         Slot                 `json:"slot"`
-	Status       contract.OrderStatus `json:"order_status"`
-	Address      *Address             `json:"address,omitempty"`
+	ID           string                 `json:"id"`
+	BuildingName string                 `json:"building_name"`
+	ItemCount    int32                  `json:"item_count"`
+	FeeFen       int64                  `json:"fee_fen"`
+	Slot         Slot                   `json:"slot"`
+	Status       contract.OrderStatus   `json:"order_status"`
+	Method       contract.PaymentMethod `json:"payment_method"`
+	Address      *Address               `json:"address,omitempty"`
+	CODDueFen    *int64                 `json:"cod_due_fen,omitempty"`
 }
 type LobbyTask struct {
-	ID           string               `json:"id"`
-	BuildingName string               `json:"building_name"`
-	ItemCount    int32                `json:"item_count"`
-	FeeFen       int64                `json:"fee_fen"`
-	Slot         Slot                 `json:"slot"`
-	Status       contract.OrderStatus `json:"order_status"`
+	ID           string                 `json:"id"`
+	BuildingName string                 `json:"building_name"`
+	ItemCount    int32                  `json:"item_count"`
+	FeeFen       int64                  `json:"fee_fen"`
+	Slot         Slot                   `json:"slot"`
+	Status       contract.OrderStatus   `json:"order_status"`
+	Method       contract.PaymentMethod `json:"payment_method"`
 }
 
-func lobby(t Task) LobbyTask {
-	return LobbyTask{t.ID, t.BuildingName, t.ItemCount, t.FeeFen, t.Slot, t.Status}
-}
 func (s *Service) Task(ctx context.Context, tx pgx.Tx, actor identity.Session, id string) (Task, error) {
 	task, err := taskIdentity(ctx, tx, actor.StationID, id)
 	if err != nil {
@@ -53,10 +53,13 @@ func (s *Service) Task(ctx context.Context, tx pgx.Tx, actor identity.Session, i
 	if task.State != "OPEN" && (task.RiderID == nil || *task.RiderID != actor.AccountID) {
 		return Task{}, ErrNotFound
 	}
-	out := Task{ID: id, BuildingName: o.Address.BuildingName, ItemCount: o.ItemCount, FeeFen: o.FeeFen, Slot: slotView(o.Slot), Status: o.Status}
+	out := Task{ID: id, BuildingName: o.Address.BuildingName, ItemCount: o.ItemCount, FeeFen: o.FeeFen, Slot: slotView(o.Slot), Status: o.Status, Method: o.Method}
 	if task.RiderID != nil && *task.RiderID == actor.AccountID && (task.State == "ASSIGNED" || task.State == "PICKED_UP" || task.State == "RETURNING") {
 		a := addressView(o.Address)
 		out.Address = &a
+		if task.State == "PICKED_UP" && o.Method == contract.PaymentMethodCod {
+			out.CODDueFen = &o.TotalFen
+		}
 	}
 	return out, nil
 }

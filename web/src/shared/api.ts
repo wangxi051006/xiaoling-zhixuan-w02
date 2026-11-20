@@ -39,8 +39,14 @@ export async function apiRequest<T>(path: string, options: RequestOptions = {}):
   const headers = new Headers({ Accept: 'application/json' });
   if (options.csrf) headers.set('X-CSRF-Token', options.csrf);
   if (options.idempotencyKey) headers.set('Idempotency-Key', options.idempotencyKey);
-  if (options.body !== undefined) headers.set('Content-Type', 'application/json');
-  const body = options.body === undefined ? undefined : JSON.stringify(options.body);
+  let body: BodyInit | undefined;
+  if (options.body instanceof Blob) {
+    headers.set('Content-Type', options.body.type);
+    body = options.body;
+  } else if (options.body !== undefined) {
+    headers.set('Content-Type', 'application/json');
+    body = JSON.stringify(options.body);
+  }
   const fetcher = options.fetcher ?? fetch;
   const retryable = method === 'GET' || method === 'HEAD' || !!options.idempotencyKey;
   const request: RequestInit = { method, headers, body, signal: options.signal, credentials: 'same-origin', redirect: 'error', cache: 'no-store' };

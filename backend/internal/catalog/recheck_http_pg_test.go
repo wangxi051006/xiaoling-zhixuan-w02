@@ -20,7 +20,7 @@ func fixtureHandler(t *testing.T, h *HTTP) http.Handler {
 	t.Helper()
 	mux := http.NewServeMux()
 	h.Register(mux)
-	return platform.NewHandler(mux, nil, nil, 0)
+	return platform.NewHandler(mux, nil, nil, 0, platform.BodyLimit{Pattern: ImageUploadPattern, Bytes: MaxImageBytes})
 }
 func catalogCall(t *testing.T, h http.Handler, method, path, key, body string, status int) *httptest.ResponseRecorder {
 	t.Helper()

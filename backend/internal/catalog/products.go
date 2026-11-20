@@ -35,6 +35,7 @@ type Product struct {
 	ID          string `json:"id"`
 	Name        string `json:"name"`
 	Description string `json:"description"`
+	ImageURL    string `json:"image_url,omitempty"`
 	SKUs        []SKU  `json:"skus"`
 }
 
@@ -59,6 +60,7 @@ type AdminProduct struct {
 type ProductInput struct {
 	Name         string     `json:"name"`
 	Description  string     `json:"description"`
+	ImageURL     string     `json:"image_url,omitempty"`
 	SKUs         []SKUInput `json:"skus"`
 	OnSale       bool       `json:"on_sale"`
 	ReorderPoint int64      `json:"reorder_point"`
@@ -67,6 +69,7 @@ type ProductInput struct {
 type ProductUpdate struct {
 	Name            *string `json:"name,omitempty"`
 	Description     *string `json:"description,omitempty"`
+	ImageURL        *string `json:"image_url,omitempty"`
 	OnSale          *bool   `json:"on_sale,omitempty"`
 	ReorderPoint    *int64  `json:"reorder_point,omitempty"`
 	ExpectedVersion int64   `json:"expected_version"`
@@ -85,7 +88,7 @@ type reader interface {
 	QueryRow(context.Context, string, ...any) pgx.Row
 }
 
-const productSelect = `SELECT p.id,p.name,p.description,p.on_sale,p.version,
+const productSelect = `SELECT p.id,p.name,p.description,p.image_url,p.on_sale,p.version,
 	i.id,i.on_hand,i.reserved,i.reorder_point,i.version,
 	CASE WHEN p.promotion_id IS NOT NULL THEN jsonb_build_object('starts_at',p.promotion_starts_at,
 	'ends_at',p.promotion_ends_at,'tiers',p.promotion_tiers) END,
@@ -97,7 +100,7 @@ func scanProduct(row pgx.Row) (AdminProduct, error) {
 	var p AdminProduct
 	i := &p.Inventory
 	var promotion, skus []byte
-	err := row.Scan(&p.ID, &p.Name, &p.Description, &p.OnSale, &p.Version, &i.ID, &i.OnHand, &i.Reserved, &i.ReorderPoint, &i.Version, &promotion, &skus)
+	err := row.Scan(&p.ID, &p.Name, &p.Description, &p.ImageURL, &p.OnSale, &p.Version, &i.ID, &i.OnHand, &i.Reserved, &i.ReorderPoint, &i.Version, &promotion, &skus)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return p, ErrNotFound
 	}
@@ -150,7 +153,7 @@ func (s Store) CreateProduct(ctx context.Context, tx pgx.Tx, station string, in 
 		}
 	}
 	id := randomID()
-	if _, err := tx.Exec(ctx, `INSERT INTO products(id,station_id,name,description,on_sale) VALUES($1,$2,$3,$4,$5)`, id, station, in.Name, in.Description, in.OnSale); err != nil {
+	if _, err := tx.Exec(ctx, `INSERT INTO products(id,station_id,name,description,on_sale,image_url) VALUES($1,$2,$3,$4,$5,$6)`, id, station, in.Name, in.Description, in.OnSale, in.ImageURL); err != nil {
 		return AdminProduct{}, err
 	}
 	if _, err := tx.Exec(ctx, `INSERT INTO inventory(id,product_id,reorder_point) VALUES($1,$2,$3)`, randomID(), id, in.ReorderPoint); err != nil {
@@ -228,7 +231,7 @@ func (s Store) UpdateProduct(ctx context.Context, tx pgx.Tx, station, id string,
 			return AdminProduct{}, err
 		}
 	}
-	if _, err := tx.Exec(ctx, `UPDATE products SET name=COALESCE($2,name),description=COALESCE($3,description),on_sale=COALESCE($4,on_sale),version=version+1 WHERE id=$1`, id, in.Name, in.Description, in.OnSale); err != nil {
+	if _, err := tx.Exec(ctx, `UPDATE products SET name=COALESCE($2,name),description=COALESCE($3,description),on_sale=COALESCE($4,on_sale),image_url=COALESCE($5,image_url),version=version+1 WHERE id=$1`, id, in.Name, in.Description, in.OnSale, in.ImageURL); err != nil {
 		return AdminProduct{}, err
 	}
 	return s.GetProduct(ctx, tx, station, id, false)

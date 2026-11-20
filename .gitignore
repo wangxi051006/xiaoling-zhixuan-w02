@@ -1,5 +1,7 @@
 /web/node_modules/
 /web/dist/
+/backend/product-images/
+/product-images/
 /.dsh-resume/
 /evidence/
 /docs/evidence/launch/*

@@ -9,7 +9,7 @@ const product={id:'p1',name:'恢复测试商品',description:'用于故障分支
 const quote={quote_id:'q1',valid_until:'2099-01-01T00:00:00Z',slot_id:slot.id,lines:[{sku_id:'s1',qty:1,name:product.name,spec:'单件',unit_price_fen:500,line_total_fen:500}],total_fen:500,payment_method:'BALANCE'};
 const order={id:'o1',delivery_mode:'SCHEDULED',slot,status:'SCHEDULED',stock_status:'UNSORTED',settlement_status:'BALANCE_PAID',payment_method:'BALANCE',total_fen:500,lines:quote.lines,created_at:'2026-11-19T03:00:00Z'};
 const address={id:'a1',building_id:'b1',building_name:'合成楼栋',room:'101',contact_name:'合成用户',contact_phone:'+15550000001',version:1};
-const task={id:'t1',building_name:'合成楼栋',item_count:1,fee_fen:100,slot,order_status:'READY_FOR_CLAIM'};
+const task={id:'t1',building_name:'合成楼栋',item_count:1,fee_fen:100,slot,order_status:'READY_FOR_CLAIM',payment_method:'COD'};
 const pageOf=items=>({items,next_cursor:null});
 async function withRole(role,fn,roles){
  const vite=await createVite({configFile:false,server:{middlewareMode:true,hmr:false,ws:false},appType:'custom'});
@@ -31,6 +31,7 @@ async function withRole(role,fn,roles){
     '/catalog/products':pageOf([product]),'/catalog/products/p1':product,'/me/addresses':pageOf([address]),'/delivery/slots':pageOf([slot]),'/me/wallet':{balance_fen:10000,currency:'CNY'},
     '/payment-methods':{methods:[{code:'COD',enabled:true,label:'货到付款'},{code:'BALANCE',enabled:true,label:'余额'},{code:'WECHAT',enabled:false,label:'微信待接入'}]},
     '/checkout/quote':quote,'/orders':pageOf([]),'/orders/o1':order,'/rider/tasks':pageOf([task]),'/rider/history':pageOf([]),'/rider/earnings':pageOf([]),'/rider/messages':pageOf([]),
+    '/rider/capacity':{active:0,limit:8,remaining:8,cod_active:false},'/admin/order-limits':{merchant_batch_limit:15,rider_active_limit:8,version:1},
     '/admin/dashboard':{local_date:'2026-11-19',order_count:1,delivered_count:1,net_collected_fen:500,overdue_count:0},'/admin/refunds':pageOf([]),'/admin/cod/receipts':pageOf([])
    };
    await respond(defaults[path]||pageOf([]));
@@ -40,6 +41,185 @@ async function withRole(role,fn,roles){
  }finally{await browser?.close();await vite.close();await new Promise(r=>server.close(r));}
 }
 
+for (const trigger of ['poll', 'return to the tab', 'dispatch conflict', 'checked retry conflict']) {
+ test(`MOCK warehouse refreshes the order after a rider delivers it via ${trigger}`, async () => withRole('admin', async ({page, start, write, handle}) => {
+  const prepared = {...order, status:'PREPARING', stock_status:'SORTED', merchant_accepted:true, address, overdue:false};
+  let current = prepared;
+  let firstAttempt = true;
+  handle(async ({path, respond}) => {
+   if (path === '/admin/orders') await respond(pageOf([current]));
+   else if (path === '/admin/orders/o1') await respond(current);
+   else if (path === '/admin/orders/o1/dispatch') {
+    if (trigger === 'checked retry conflict' && firstAttempt) {
+     firstAttempt = false;
+     await respond({code:'INTERNAL_ERROR', message:'暂时无法确认放单结果', request_id:'synthetic'}, 503);
+    } else {
+     await respond({code:'INVALID_STATE', message:'订单状态已改变', request_id:'synthetic'}, 409);
+    }
+   }
+   else return false;
+   return true;
+  });
+  await start();
+  await page.getByRole('button', {name:'订单履约', exact:true}).click();
+  const row = page.getByTestId('merchant-order-o1');
+  await page.getByTestId('order-o1').click();
+  const detail = page.getByTestId('admin-order-detail');
+  const dispatch = detail.getByTestId('dispatch');
+  await page.waitForFunction(() => document.querySelector('[data-testid="dispatch"]')?.disabled === false);
+
+  if (trigger === 'return to the tab') {
+   await page.evaluate(() => {
+    Object.defineProperty(document, 'hidden', {value:true, configurable:true});
+    document.dispatchEvent(new Event('visibilitychange'));
+   });
+  }
+  if (trigger === 'checked retry conflict') {
+   await dispatch.click();
+   await page.getByTestId('check-uncertain').click();
+   await page.getByText('已刷新服务器记录，请核对当前状态。', {exact:true}).waitFor();
+  }
+  current = {...prepared, status:'DELIVERED'};
+  if (trigger === 'poll') {
+   await page.clock.runFor(10_000);
+  } else if (trigger === 'return to the tab') {
+   await page.clock.runFor(10_000);
+   assert.equal(await detail.getByText('已送达', {exact:true}).count(), 0);
+   await page.evaluate(() => {
+    Object.defineProperty(document, 'hidden', {value:false, configurable:true});
+    document.dispatchEvent(new Event('visibilitychange'));
+   });
+  } else {
+   await (trigger === 'checked retry conflict' ? page.getByTestId('retry-uncertain') : dispatch).click();
+   await page.getByRole('alert').filter({hasText:'INVALID_STATE'}).waitFor();
+  }
+  await detail.getByText('已送达', {exact:true}).waitFor({timeout:3000});
+  await row.getByText('已送达', {exact:true}).waitFor({timeout:3000});
+  assert.ok(await dispatch.isDisabled());
+  const attempts = write.filter(entry => entry.path === '/admin/orders/o1/dispatch');
+  assert.equal(attempts.length, trigger === 'checked retry conflict' ? 2 : trigger === 'dispatch conflict' ? 1 : 0);
+  if (trigger === 'checked retry conflict') assert.equal(attempts[0].key, attempts[1].key);
+ }, ['OPERATOR']));
+}
+
+test('MOCK operator saves a decimal delivery fee as integer fen', async () => withRole('admin', async ({page, start, write, handle}) => {
+ let setting = {delivery_fee_fen: 0, version: 1};
+ handle(async ({path, req, respond}) => {
+  if (path !== '/admin/delivery-fee') return false;
+  if (req.method() === 'PUT') {
+   assert.deepEqual(req.postDataJSON(), {delivery_fee_fen: 235, expected_version: 1, cod_commission_bps: 1250});
+   setting = {delivery_fee_fen: 235, version: 2, cod_commission_bps: 1250};
+  }
+  await respond(setting);
+  return true;
+ });
+ await start();
+ await page.getByRole('button', {name: '配送费', exact: true}).click();
+ const amount = page.getByLabel('每单配送费（块）', {exact: true});
+ const commission = page.getByLabel('货到付款提成（%）', {exact: true});
+ const save = page.getByRole('button', {name: '保存配送费和提成', exact: true});
+ await amount.fill('2.351');
+ assert.ok(await save.isDisabled());
+ await amount.fill('2.35');
+ await commission.fill('100.01');
+ assert.ok(await save.isDisabled());
+ await commission.fill('12.5');
+ await save.click();
+ await page.getByText('当前配送费 2.35 块 / 单', {exact: true}).waitFor();
+ assert.ok(write.find(entry => entry.path === '/admin/delivery-fee')?.key);
+ await page.getByRole('button', {name: '刷新服务器数据'}).click();
+ await page.getByText('当前配送费 2.35 块 / 单', {exact: true}).waitFor();
+ assert.equal(await commission.inputValue(),'12.5');
+}, ['OPERATOR']));
+
+test('MOCK product editor preserves cents when reading and saving a price', async () => withRole('admin', async ({page, start, write, handle}) => {
+ const adminProduct = {
+  ...product, on_sale: true, version: 1, promotion: null,
+  skus: [{...product.skus[0], unit_price_fen: 501}],
+  inventory: {id:'inv-1', on_hand:10, reserved:0, reorder_point:0, version:1},
+ };
+ handle(async ({path, respond}) => {
+  if (path === '/admin/products') await respond(pageOf([adminProduct]));
+  else if (path === '/admin/products/p1') await respond({...adminProduct, version:2});
+  else return false;
+  return true;
+ });
+ await start();
+ await page.getByRole('button', {name:'商品与库存', exact:true}).click();
+ await page.getByTestId('edit-product-p1').click();
+ const price = page.getByLabel('规格价格（块）');
+ assert.equal(await price.inputValue(), '5.01');
+ await price.fill('6.999');
+ await page.getByTestId('save-product').click();
+ assert.equal(write.length, 0);
+ await price.fill('6.58');
+ const response = page.waitForResponse(r => r.url().endsWith('/admin/products/p1') && r.request().method() === 'PATCH');
+ await page.getByTestId('save-product').click();
+ assert.deepEqual((await response).request().postDataJSON().skus, [{...product.skus[0], unit_price_fen:658}]);
+}, ['OPERATOR']));
+
+test('MOCK finance submits the counted amount in exact fen', async () => withRole('admin', async ({page, start, write, handle}) => {
+ handle(async ({path, respond}) => {
+  if (path !== '/admin/cod/batches/b1/verify') return false;
+  await respond({id:'b1', rider_id:'r1', local_date:'2026-11-19', expected_fen:1000, actual_fen:995, difference_fen:5, status:'DISCREPANCY'});
+  return true;
+ });
+ await start();
+ await page.getByRole('button', {name:'COD 财务', exact:true}).click();
+ const amount = page.getByLabel('实际清点金额（块）');
+ await page.getByLabel('批次号').fill('b1');
+ await amount.fill('9.955');
+ await page.getByTestId('verify-cod-batch').click();
+ assert.equal(write.length, 0);
+ await amount.fill('9.95');
+ const response = page.waitForResponse(r => r.url().endsWith('/admin/cod/batches/b1/verify'));
+ await page.getByTestId('verify-cod-batch').click();
+ assert.equal((await response).request().postDataJSON().actual_fen, 995);
+ assert.equal(await page.getByTestId('cod-batch-difference').innerText(), '少缴 0.05 块');
+}));
+
+test('MOCK customer sees the same delivery fee in the quote and placed order', async () => withRole('user', async ({page, start, handle}) => {
+ const prices = {subtotal_fen: 500, delivery_fee_fen: 235, total_fen: 735};
+ handle(async ({path, req, respond}) => {
+  if (path === '/checkout/quote') { await respond({...quote, ...prices}, 201); return true; }
+  if (path === '/orders' && req.method() === 'POST') { await respond({...order, ...prices}, 201); return true; }
+  if (path === '/orders/o1') { await respond({...order, ...prices}); return true; }
+  return false;
+ });
+ await start();
+ await page.getByTestId('add-s1').click();
+ await page.getByRole('button', {name: /^购物袋/}).click();
+ await page.getByTestId('quote').click();
+ for (const label of ['商品小计 5 块', '配送费 2.35 块', '合计 7.35 块']) {
+  await page.getByText(label, {exact: true}).waitFor();
+ }
+ await page.getByTestId('confirm-order').click();
+ const detail = page.getByTestId('order-detail');
+ await detail.getByText('配送费 2.35 块', {exact: true}).waitFor();
+ await detail.getByText('合计 7.35 块', {exact: true}).waitFor();
+}));
+
+test('MOCK rider sees customer cash due separately from delivery income', async () => withRole('rider', async ({page, start, handle}) => {
+ const assigned = {...task, fee_fen: 235, cod_due_fen: 735, order_status: 'IN_DELIVERY'};
+ handle(async ({path, respond}) => {
+  if (path === '/rider/tasks') { await respond(pageOf([assigned])); return true; }
+  if (path === '/rider/tasks/t1') { await respond(assigned); return true; }
+  if (path === '/rider/earnings') {
+   await respond(pageOf([{id:'e1',task_id:'t1',amount_fen:235,recorded_at:'2026-11-19T03:00:00Z'}]));
+   return true;
+  }
+  return false;
+ });
+ await start();
+ await page.getByRole('button', {name: '当前任务', exact: true}).click();
+ await page.getByTestId('task-t1').click();
+ const current = page.getByTestId('current-task');
+ await current.getByText('货到付款应收 7.35 块', {exact: true}).waitFor();
+ await current.getByText(/配送费 2.35 块/).waitFor();
+ await page.getByRole('button', {name: '历史与收入'}).click();
+ await page.getByText('配送费收入 2.35 块', {exact: true}).waitFor();
+}));
+
 test('MOCK user conflict keeps selected payment/window and requires fresh quotation',async()=>withRole('user',async({page,start,handle})=>{
  let code='QUOTE_CHANGED';handle(async({path,req,respond})=>{if(path==='/orders'&&req.method()==='POST'){await respond({code,message:'服务器拒绝本次交易',request_id:'synthetic'},409);return true;}});
  await start();await page.getByTestId('add-s1').click();await page.getByRole('button',{name:/^购物袋/}).click();await page.getByLabel('配送方式',{exact:true}).selectOption('SCHEDULED');await page.getByLabel('服务窗口',{exact:true}).selectOption(slot.id);await page.getByRole('radio',{name:'余额',exact:true}).check();
@@ -47,6 +227,32 @@ test('MOCK user conflict keeps selected payment/window and requires fresh quotat
   code=value;await page.getByTestId('quote').click();await page.getByTestId('confirm-order').click();await page.getByRole('alert').filter({hasText:value}).waitFor();
   assert.equal(await page.getByRole('radio',{name:'余额',exact:true}).isChecked(),true);assert.equal(await page.getByLabel('服务窗口',{exact:true}).inputValue(),slot.id);assert.equal(await page.getByTestId('confirm-order').count(),0);assert.equal(await page.getByTestId('order-detail').count(),0);
  }
+}));
+
+test('MOCK user can place a second COD order while the first is active',async()=>withRole('user',async({page,start,handle,write})=>{
+ const firstOrder={...order,id:'first-cod',payment_method:'COD',settlement_status:'COD_UNCOLLECTED'};
+ const secondOrder={...firstOrder,id:'second-cod'};
+ let created=false;
+ handle(async({path,req,respond})=>{
+  if(path==='/checkout/quote'){await respond({...quote,payment_method:'COD'});return true;}
+  if(path==='/orders'&&req.method()==='POST'){created=true;await respond(secondOrder,201);return true;}
+  if(path==='/orders'){await respond(pageOf(created?[secondOrder,firstOrder]:[firstOrder]));return true;}
+  if(path==='/orders/second-cod'){await respond(secondOrder);return true;}
+ });
+
+ await start();
+ await page.getByTestId('add-s1').click();
+ await page.getByRole('button',{name:'我的订单',exact:true}).click();
+ await page.getByTestId('order-first-cod').waitFor();
+ await page.getByRole('button',{name:'购物袋 (1)',exact:true}).click();
+ assert.equal(await page.getByText(/已有一笔进行中的货到付款订单/).count(),0);
+ assert.equal(await page.getByRole('radio',{name:'货到付款',exact:true}).isChecked(),true);
+ await page.getByTestId('quote').click();
+ await page.getByTestId('confirm-order').click();
+ await page.getByRole('status').filter({hasText:'服务器已确认订单'}).waitFor();
+ await page.getByTestId('order-detail').getByText('当前履约：预约待备货').waitFor();
+ await page.getByTestId('order-first-cod').waitFor();
+ assert.equal(write.filter(entry=>entry.path==='/orders').length,1);
 }));
 
 test('MOCK user uncertain committed order requires check then same operation body and key retry',async()=>withRole('user',async({page,start,handle,write})=>{
@@ -72,6 +278,35 @@ for(const status of [201,500])test(`MOCK ambiguous HTTP ${status} preserves orig
 test('MOCK paginated catalog includes subsequent server pages',async()=>withRole('user',async({page,start,handle})=>{
  handle(async({path,req,respond})=>{if(path==='/catalog/products'){const cursor=new URL(req.url()).searchParams.get('cursor');await respond(cursor?pageOf([{...product,id:'p2',name:'第二页商品',skus:[{...product.skus[0],id:'s2'}]}]):{items:[product],next_cursor:'p1'});return true;}});
  await start();await page.getByTestId('add-s1').waitFor();assert.equal(await page.getByTestId('add-s2').count(),1,'catalog must consume the next_cursor instead of silently omitting products');
+}));
+
+test('user can keep valid cart items after searching, remove stale SKUs and understand an unavailable delivery slot',async()=>withRole('user',async({page,start,handle,write})=>{
+ handle(async({path,respond})=>{
+  if(path!=='/checkout/quote')return false;
+  await respond({code:'SLOT_EXPIRED',message:'Conflict',request_id:'synthetic'},409);
+  return true;
+ });
+ await page.addInitScript(()=>localStorage.setItem('xiaoling.cart',JSON.stringify([
+  {sku_id:'s1',qty:1},{sku_id:'old-sku',qty:8},
+ ])));
+ await start();
+ await page.getByTestId('add-s1').waitFor();
+ await page.getByLabel('搜索商品',{exact:true}).fill('不匹配任何商品');
+ await page.getByRole('button',{name:'搜索',exact:true}).click();
+ await page.getByText('没有找到商品',{exact:true}).waitFor();
+ await page.getByRole('button',{name:/^购物袋/}).click();
+ await page.getByText('恢复测试商品 · 单件',{exact:true}).waitFor();
+ const stale=page.getByText('商品规格已失效',{exact:true});
+ const quoteButton=page.getByTestId('quote');
+ await stale.waitFor();
+ assert.equal(await quoteButton.isDisabled(),true);
+ await stale.locator('..').getByRole('button',{name:'移除',exact:true}).click();
+ await quoteButton.click();
+ await page.getByRole('alert').filter({hasText:'暂时没有可用的即时配送时段'}).waitFor();
+ const quotes=write.filter(entry=>entry.path==='/checkout/quote');
+ assert.equal(quotes.length,1);
+ assert.deepEqual(JSON.parse(quotes[0].body).lines,[{sku_id:'s1',qty:1}]);
+ assert.equal(await page.getByLabel('配送方式',{exact:true}).inputValue(),'ASAP');
 }));
 
 test('MOCK changing checkout selection invalidates a quotation already in flight',async()=>withRole('user',async({page,start,handle})=>{
@@ -144,7 +379,7 @@ test('MOCK rider all unread messages are written in independently keyed batches 
   if(path==='/rider/messages'){await respond(pageOf(mail.map(m=>({...m,...(read.has(m.id)?{read_at:'2026-11-19T03:00:00Z'}:{})}))));return true;}
   if(path==='/rider/messages/read'){for(const id of req.postDataJSON().ids)read.add(id);await respond({accepted:true});return true;}
  });
- await start();await page.getByRole('button',{name:'消息',exact:true}).click();await page.getByTestId('read-all').click();await page.waitForFunction(()=>document.querySelector('[data-testid="read-all"]')?.disabled===true);const batches=write.filter(w=>w.path==='/rider/messages/read');assert.deepEqual(batches.map(w=>JSON.parse(w.body).ids.length),[100,100,5],'mark-read contract only accepts up to 100 ids per command');assert.equal(new Set(batches.map(w=>w.key)).size,3);
+ await start();await page.getByRole('button',{name:'消息',exact:true}).click();await page.getByTestId('read-all').click();await page.getByRole('status').filter({hasText:'消息已由服务器标记为已读'}).waitFor();const batches=write.filter(w=>w.path==='/rider/messages/read');assert.deepEqual(batches.map(w=>JSON.parse(w.body).ids.length),[100,100,5],'mark-read contract only accepts up to 100 ids per command');assert.equal(new Set(batches.map(w=>w.key)).size,3);
 }));
 
 test('MOCK rider failed explicit server check does not enable uncertain retry',async()=>withRole('rider',async({page,start,handle})=>{
@@ -153,10 +388,59 @@ test('MOCK rider failed explicit server check does not enable uncertain retry',a
 }));
 
 test('MOCK rider periodic refresh preserves explicit COD confirmation for same task',async()=>withRole('rider',async({page,start,handle})=>{
- handle(async({path,respond})=>{if(path==='/rider/tasks'){await respond(pageOf([{...task,order_status:'IN_DELIVERY'}]));return true;}if(path==='/rider/tasks/t1'){await respond({...task,order_status:'IN_DELIVERY',address});return true;}});
+ handle(async({path,respond})=>{if(path==='/rider/tasks'){await respond(pageOf([{...task,order_status:'IN_DELIVERY'}]));return true;}if(path==='/rider/tasks/t1'){await respond({...task,order_status:'IN_DELIVERY',address,cod_due_fen:500});return true;}});
  await start();await page.getByRole('button',{name:'当前任务',exact:true}).click();await page.getByLabel('已全额收到货到付款',{exact:true}).check();await page.clock.runFor(10020);
  const refreshed=page.waitForResponse(r=>r.url().endsWith('/rider/tasks/t1'));await page.getByTestId('refresh-tasks').click();await refreshed;
  assert.equal(await page.getByLabel('已全额收到货到付款',{exact:true}).isChecked(),true,'same active task should preserve the rider confirmation');
+}));
+
+test('MOCK rider opens the earliest remaining delivery after completing a task',async()=>withRole('rider',async({page,start,handle})=>{
+ const jobs=[
+  {...task,id:'later',order_status:'IN_DELIVERY'},
+  {...task,id:'urgent',order_status:'IN_DELIVERY',payment_method:'BALANCE',slot:{...slot,ends_at:'2026-11-19T03:45:00Z'}},
+  {...task,id:'first',order_status:'IN_DELIVERY'},
+  {...task,id:'unclaimed',slot:{...slot,ends_at:'2026-11-19T03:30:00Z'}},
+ ];
+ handle(async({path,req,respond})=>{
+  if(path==='/rider/tasks'){
+   await respond(pageOf(jobs.filter(job=>job.order_status!=='DELIVERED')));
+   return true;
+  }
+  if(path==='/rider/task-batches/deliver'){
+   const {ids}=req.postDataJSON();
+   for(const job of jobs.filter(job=>ids.includes(job.id)))job.order_status='DELIVERED';
+   await respond({count:ids.length});
+   return true;
+  }
+  const job=jobs.find(job=>path===`/rider/tasks/${job.id}`||path===`/rider/tasks/${job.id}/deliver`);
+  if(!job)return false;
+  if(path.endsWith('/deliver'))job.order_status='DELIVERED';
+  await respond({...job,address,...(job.payment_method==='COD'&&job.order_status==='IN_DELIVERY'?{cod_due_fen:500}:{})});
+  return true;
+ });
+ await start();
+ await page.getByRole('button',{name:'当前任务',exact:true}).click();
+ await page.getByTestId('task-first').click();
+ const detail=page.getByTestId('current-task');
+ const cash=detail.getByLabel('已全额收到货到付款');
+ await detail.getByText('任务 first',{exact:true}).waitFor();
+ await page.getByLabel('付款方式').selectOption('COD');
+ await cash.check();
+ await detail.getByTestId('deliver').click();
+ await detail.getByText('任务 urgent',{exact:true}).waitFor({timeout:3000});
+ assert.equal(await page.getByLabel('付款方式').inputValue(),'ALL');
+ await page.getByTestId('rider-task-first').waitFor({state:'detached'});
+ await page.waitForFunction(()=>document.activeElement?.id==='rider-task-detail');
+
+ await page.getByTestId('rider-task-urgent').getByRole('checkbox',{name:'选择送达'}).check();
+ await page.getByTestId('rider-batch-deliver').click();
+ await detail.getByText('任务 later',{exact:true}).waitFor();
+ assert.equal(await cash.isChecked(),false);
+ assert.equal(await detail.getByTestId('deliver').isDisabled(),true);
+ await cash.check();
+ await detail.getByTestId('deliver').click();
+ await detail.waitFor({state:'detached'});
+ await page.getByText('手上暂无进行中的任务',{exact:true}).waitFor();
 }));
 
 test('MOCK rider claim conflict refreshes hall; hidden page pauses polling',async()=>withRole('rider',async({page,start,handle})=>{

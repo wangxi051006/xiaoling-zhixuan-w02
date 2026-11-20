@@ -111,22 +111,54 @@ func TestP05TwoRidersOneTaskExactBarrier(t *testing.T) {
 		t.Fatal("double claim")
 	}
 }
-func TestP05OneRiderTwoTasksExactBarrier(t *testing.T) {
+func TestOneRiderConcurrentSingleAndBatchClaimsRespectCapacity(t *testing.T) {
 	f := setup(t)
+	f.call("op", "PUT", "/admin/order-limits", `{"merchant_batch_limit":15,"rider_active_limit":1,"expected_version":1}`, 200)
 	a := f.dispatch(f.order("buyer", "ASAP", "BALANCE"))
 	b := f.dispatch(f.order("other", "ASAP", "BALANCE"))
 	lock, pid := f.barrier("CLAIMED")
 	first := f.start("r1", "POST", "/rider/tasks/"+a+"/claim", "", "rider-first")
 	winner := f.waitBlocked(first, pid)
-	second := f.start("r1", "POST", "/rider/tasks/"+b+"/claim", "", "rider-second")
+	second := f.start("r1", "POST", "/rider/task-batches/claim", batchBody(b), "rider-second")
 	f.waitBlocked(second, winner)
 	f.release(lock)
 	f.finish(first, 200)
-	f.finish(second, 409)
+	if response := f.finish(second, 409); !strings.Contains(response.Body.String(), "ORDER_LIMIT_REACHED") {
+		t.Fatal(response.Body)
+	}
 	if f.n(`SELECT count(*) FROM delivery_tasks WHERE rider_id='r1' AND state='ASSIGNED'`) != 1 || f.n(`SELECT count(*) FROM orders WHERE status='READY_FOR_CLAIM'`) != 1 {
 		t.Fatal("same rider dual active")
 	}
 }
+
+func TestOneRiderConcurrentCODAndBalanceClaimsAreExclusive(t *testing.T) {
+	for _, firstMethod := range []string{"COD", "BALANCE"} {
+		t.Run(firstMethod+" first", func(t *testing.T) {
+			f := setup(t)
+			secondMethod := "BALANCE"
+			if firstMethod == "BALANCE" {
+				secondMethod = "COD"
+			}
+			a := f.dispatch(f.order("buyer", "ASAP", firstMethod))
+			b := f.dispatch(f.order("other", "ASAP", secondMethod))
+			lock, pid := f.barrier("CLAIMED")
+			first := f.start("r1", "POST", "/rider/tasks/"+a+"/claim", "", "exclusive-first")
+			winner := f.waitBlocked(first, pid)
+			second := f.start("r1", "POST", "/rider/task-batches/claim", batchBody(b), "exclusive-second")
+			f.waitBlocked(second, winner)
+			f.release(lock)
+			f.finish(first, 200)
+			if response := f.finish(second, 409); !strings.Contains(response.Body.String(), "COD_CLAIM_EXCLUSIVE") {
+				t.Fatal(response.Body)
+			}
+			if f.n(`SELECT count(*) FROM delivery_tasks WHERE rider_id='r1' AND state='ASSIGNED'`) != 1 ||
+				f.n(`SELECT count(*) FROM delivery_tasks WHERE id=$1 AND state='OPEN'`, b) != 1 {
+				t.Fatal("concurrent requests mixed COD and balance assignments")
+			}
+		})
+	}
+}
+
 func TestP05PickupVersusCancelAndReclaimExactBarrier(t *testing.T) {
 	for _, action := range []string{"cancel", "reclaim"} {
 		for _, winnerAction := range []string{"pickup", action} {

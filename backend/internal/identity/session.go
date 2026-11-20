@@ -81,6 +81,10 @@ func (s *Sessions) issue(ctx context.Context, accountID, issuer, subject, phone 
 // issueAt applies the same checks inside an existing transaction, so an account
 // created there is signed in without a second, separable commit.
 func (s *Sessions) issueAt(ctx context.Context, tx pgx.Tx, accountID, issuer, subject, phone string, entry Entry, mfa time.Time) (string, Session, error) {
+	return s.issueAtMode(ctx, tx, accountID, issuer, subject, phone, entry, mfa, false)
+}
+
+func (s *Sessions) issueAtMode(ctx context.Context, tx pgx.Tx, accountID, issuer, subject, phone string, entry Entry, mfa time.Time, localTest bool) (string, Session, error) {
 	now := s.clock.Now().UTC()
 	if entry == UserEntry {
 		mfa = time.Time{}
@@ -107,6 +111,9 @@ func (s *Sessions) issueAt(ctx context.Context, tx pgx.Tx, accountID, issuer, su
 	if err != nil {
 		return "", Session{}, err
 	}
+	if isLocalTestAccount(session.AccountID) != localTest || (localTest && session.AccountID != localTestAccountID(entry)) {
+		return "", Session{}, ErrSession
+	}
 	session.Roles = entryRoles(entry, roles)
 	if customer != (entry == UserEntry) || len(session.Roles) == 0 {
 		return "", Session{}, ErrSession
@@ -122,6 +129,10 @@ func (s *Sessions) issueAt(ctx context.Context, tx pgx.Tx, accountID, issuer, su
 }
 
 func (s *Sessions) Lookup(ctx context.Context, token string, entry Entry) (Session, error) {
+	return s.lookup(ctx, token, entry, false)
+}
+
+func (s *Sessions) lookup(ctx context.Context, token string, entry Entry, allowLocalTest bool) (Session, error) {
 	if len(token) != 64 {
 		return Session{}, ErrSession
 	}
@@ -140,6 +151,9 @@ func (s *Sessions) Lookup(ctx context.Context, token string, entry Entry) (Sessi
 	}
 	if err != nil {
 		return Session{}, err
+	}
+	if isLocalTestAccount(state.AccountID) && (!allowLocalTest || state.AccountID != localTestAccountID(entry)) {
+		return Session{}, ErrSession
 	}
 	state.Roles = entryRoles(entry, roles)
 	if len(state.Roles) == 0 {

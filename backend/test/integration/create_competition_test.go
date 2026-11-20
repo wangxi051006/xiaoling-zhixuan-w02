@@ -79,19 +79,18 @@ func TestP05WholeOrderASAPAndScheduledLastCapacityExactBarrier(t *testing.T) {
 		})
 	}
 }
-func TestP05WholeOrderConcurrentCODGuardAndIdempotentReplayExactBarrier(t *testing.T) {
+func TestP05WholeOrderConcurrentCODOrdersAndIdempotentReplayExactBarrier(t *testing.T) {
 	for _, sameKey := range []bool{false, true} {
 		t.Run(fmt.Sprint(sameKey), func(t *testing.T) {
 			f := setup(t)
 			q1 := f.quote("buyer", "ASAP", "COD")
 			q2 := q1
-			key2 := "create-second"
-			want := 201
+			key2 := "create-first"
+			wantOrders := int64(1)
 			if !sameKey {
 				q2 = f.quote("buyer", "ASAP", "COD")
-				want = 409
-			} else {
-				key2 = "create-first"
+				key2 = "create-second"
+				wantOrders = 2
 			}
 			lock, pid := f.barrier("CREATED")
 			first := f.start("buyer", "POST", "/orders", fmt.Sprintf(`{"quote_id":%q}`, q1), "create-first")
@@ -100,15 +99,16 @@ func TestP05WholeOrderConcurrentCODGuardAndIdempotentReplayExactBarrier(t *testi
 			f.waitBlocked(second, winner)
 			f.release(lock)
 			a := f.finish(first, 201)
-			b := f.finish(second, want)
-			if sameKey && a.Body.String() != b.Body.String() {
-				t.Fatal("concurrent replay differs")
+			b := f.finish(second, 201)
+			if (a.Body.String() == b.Body.String()) != sameKey {
+				t.Fatal("only a replay should return the same order")
 			}
-			if !sameKey && !strings.Contains(b.Body.String(), "COD_ACTIVE_LIMIT") {
-				t.Fatal(b.Body)
-			}
-			if f.n(`SELECT count(*) FROM orders`) != 1 || f.n(`SELECT used FROM delivery_slots WHERE id='asap'`) != 1 || f.n(`SELECT reserved FROM inventory`) != 1 || f.n(`SELECT count(*) FROM settlements WHERE state='COD_UNCOLLECTED'`) != 1 || f.n(`SELECT count(*) FROM cod_receipts`) != 0 {
-				t.Fatal("COD/idempotent duplicate")
+			if f.n(`SELECT count(*) FROM orders WHERE actor_id='buyer' AND method='COD' AND status='PREPARING'`) != wantOrders ||
+				f.n(`SELECT used FROM delivery_slots WHERE id='asap'`) != wantOrders ||
+				f.n(`SELECT reserved FROM inventory`) != wantOrders ||
+				f.n(`SELECT count(*) FROM settlements WHERE state='COD_UNCOLLECTED'`) != wantOrders ||
+				f.n(`SELECT count(*) FROM cod_receipts`) != 0 {
+				t.Fatal("unexpected COD orders, reservations or settlements")
 			}
 		})
 	}

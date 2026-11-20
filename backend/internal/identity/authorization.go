@@ -23,18 +23,33 @@ const (
 
 type entryOrigin struct{ origin, host string }
 
-type EntryPolicy struct{ origins map[Entry]entryOrigin }
+type EntryPolicy struct {
+	origins map[Entry]entryOrigin
+	local   bool
+}
 
 func NewEntryPolicy(user, rider, admin string) (*EntryPolicy, error) {
-	policy := &EntryPolicy{origins: make(map[Entry]entryOrigin, 3)}
+	return newEntryPolicy(user, rider, admin, false)
+}
+
+// NewLocalEntryPolicy keeps entry hosts distinct without requiring local TLS.
+func NewLocalEntryPolicy(user, rider, admin string) (*EntryPolicy, error) {
+	return newEntryPolicy(user, rider, admin, true)
+}
+
+func newEntryPolicy(user, rider, admin string, local bool) (*EntryPolicy, error) {
+	policy := &EntryPolicy{origins: make(map[Entry]entryOrigin, 3), local: local}
 	hosts := make(map[string]bool, 3)
 	for entry, raw := range map[Entry]string{UserEntry: user, RiderEntry: rider, AdminEntry: admin} {
 		u, err := url.Parse(raw)
-		if err != nil || u.Scheme != "https" || u.Hostname() == "" || u.User != nil || u.Path != "" || u.RawQuery != "" || u.ForceQuery || u.Fragment != "" {
+		if err != nil || (u.Scheme != "https" && !(local && u.Scheme == "http")) || u.Hostname() == "" || u.User != nil || u.Path != "" || u.RawQuery != "" || u.ForceQuery || u.Fragment != "" {
 			return nil, errors.New("each entry requires a distinct canonical HTTPS origin")
 		}
+		if local && u.Hostname() != string(entry)+".localhost" {
+			return nil, errors.New("test authentication requires user.localhost, rider.localhost and admin.localhost")
+		}
 		host := strings.ToLower(u.Host)
-		if raw != "https://"+host || strings.HasSuffix(u.Hostname(), ".") || u.Port() == "443" {
+		if raw != u.Scheme+"://"+host || strings.HasSuffix(u.Hostname(), ".") || (u.Scheme == "https" && u.Port() == "443") || (u.Scheme == "http" && u.Port() == "80") {
 			return nil, errors.New("entry origin is not canonical")
 		}
 		name := strings.ToLower(u.Hostname())

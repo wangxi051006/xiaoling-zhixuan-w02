@@ -59,7 +59,7 @@ func TestP05FullEmptyAndLegalPrefixUpgradeReplay(t *testing.T) {
 		// The legal prefix predates the fulfillment segment, so every migration
 		// that follows it in the chain is left out as well; the full replay below
 		// still applies and verifies all of them.
-		if strings.HasSuffix(e.Name(), ".sql") && !strings.HasPrefix(e.Name(), "050_") && !strings.HasPrefix(e.Name(), "060_") {
+		if strings.HasSuffix(e.Name(), ".sql") && e.Name() < "050_" {
 			data, err := migrations.SQL.ReadFile(e.Name())
 			if err != nil {
 				t.Fatal(err)
@@ -74,9 +74,12 @@ func TestP05FullEmptyAndLegalPrefixUpgradeReplay(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	// account_type/email/email_verified_at arrive with a later migration, so the
-	// upgrade comparison keeps to the columns the prefix schema actually had.
-	addedLater := map[string][]string{"accounts": {"account_type", "email", "email_verified_at"}}
+	// Compare only columns that existed in the prefix schema.
+	addedLater := map[string][]string{
+		"accounts": {"account_type", "email", "email_verified_at"},
+		"products": {"image_url"},
+		"stations": {"delivery_fee_fen", "delivery_fee_version", "merchant_batch_limit", "rider_active_limit", "order_limits_version", "cod_commission_bps"},
+	}
 	beforeUpgrade := tableFingerprintsWithout(t, f.ctx, p, true, addedLater)
 	for i := 0; i < 2; i++ {
 		if err = platform.Migrate(f.ctx, p, migrations.SQL); err != nil {
@@ -100,6 +103,10 @@ func TestP05FullEmptyAndLegalPrefixUpgradeReplay(t *testing.T) {
 	var count, hand int
 	if err = p.QueryRow(f.ctx, `SELECT (SELECT count(*) FROM schema_migrations),(SELECT on_hand FROM inventory WHERE id='inventory')`).Scan(&count, &hand); err != nil || count != buildMigrationCount || hand != 7 {
 		t.Fatal(count, hand, err)
+	}
+	var fee, version, commission int64
+	if err = p.QueryRow(f.ctx, `SELECT delivery_fee_fen,delivery_fee_version,cod_commission_bps FROM stations WHERE id='upgrade'`).Scan(&fee, &version, &commission); err != nil || fee != 0 || version != 1 || commission != 1000 {
+		t.Fatalf("upgraded station fee=%d version=%d commission=%d: %v", fee, version, commission, err)
 	}
 }
 
@@ -127,7 +134,7 @@ func tableFingerprintsWithout(t *testing.T, ctx context.Context, p *pgxpool.Pool
 	for _, table := range tables {
 		filter := ""
 		if excludeMigrations && table == "schema_migrations" {
-			filter = " WHERE name NOT LIKE '050_%' AND name NOT LIKE '060_%'"
+			filter = " WHERE version < '050_001'"
 		}
 		projection := "to_jsonb(t)"
 		for _, column := range strip[table] {

@@ -36,12 +36,14 @@ func priceViews(lines []contract.PricedLine) []PriceLine {
 }
 
 type Quote struct {
-	ID         string                 `json:"quote_id"`
-	ValidUntil time.Time              `json:"valid_until"`
-	SlotID     string                 `json:"slot_id"`
-	Lines      []PriceLine            `json:"lines"`
-	TotalFen   int64                  `json:"total_fen"`
-	Method     contract.PaymentMethod `json:"payment_method"`
+	ID             string                 `json:"quote_id"`
+	ValidUntil     time.Time              `json:"valid_until"`
+	SlotID         string                 `json:"slot_id"`
+	Lines          []PriceLine            `json:"lines"`
+	SubtotalFen    int64                  `json:"subtotal_fen"`
+	DeliveryFeeFen int64                  `json:"delivery_fee_fen"`
+	TotalFen       int64                  `json:"total_fen"`
+	Method         contract.PaymentMethod `json:"payment_method"`
 }
 type quoteRow struct {
 	ID, ActorID, StationID string
@@ -88,17 +90,21 @@ func (s *Service) Quote(ctx context.Context, tx pgx.Tx, actor identity.Session, 
 	if err != nil {
 		return Quote{}, err
 	}
-	prices, err := s.Catalog.Price(ctx, tx, lines, now)
+	items, err := s.Catalog.Price(ctx, tx, lines, now)
 	if err != nil {
 		return Quote{}, err
 	}
-	if err = validatePrices(prices); err != nil {
+	prices, err := withDeliveryFee(ctx, tx, actor.StationID, items)
+	if err != nil {
 		return Quote{}, err
 	}
 	a, _ := json.Marshal(address)
 	sl, _ := json.Marshal(slot)
 	p, _ := json.Marshal(prices)
-	q := Quote{ValidUntil: now.Add(5 * time.Minute), SlotID: slot.ID, Lines: priceViews(prices.Lines), TotalFen: prices.TotalFen, Method: in.Method}
+	q := Quote{
+		ValidUntil: now.Add(5 * time.Minute), SlotID: slot.ID, Lines: priceViews(prices.Lines), Method: in.Method,
+		SubtotalFen: prices.SubtotalFen, DeliveryFeeFen: prices.DeliveryFeeFen, TotalFen: prices.TotalFen,
+	}
 	err = tx.QueryRow(ctx, `INSERT INTO quotes(actor_id,station_id,mode,method,slot_id,address_snapshot,slot_snapshot,priced_snapshot,valid_until,created_at) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10) RETURNING id`, actor.AccountID, actor.StationID, in.Mode, in.Method, slot.ID, a, sl, p, q.ValidUntil, now).Scan(&q.ID)
 	return q, err
 }
@@ -155,10 +161,6 @@ func (s *Service) Create(ctx context.Context, tx pgx.Tx, actor identity.Session,
 	if !s.AcceptNewOrders {
 		return Order{}, ErrNotReady
 	}
-	// The account-scoped guard precedes the quote/order, slot, inventory and wallet locks.
-	if _, err := tx.Exec(ctx, `SELECT pg_advisory_xact_lock(hashtextextended('xiaoling:cod:'||current_schema()||':'||$1,0))`, actor.AccountID); err != nil {
-		return Order{}, err
-	}
 	q, err := loadQuote(ctx, tx, actor, in.QuoteID)
 	if err != nil {
 		return Order{}, err
@@ -185,30 +187,25 @@ func (s *Service) Create(ctx context.Context, tx pgx.Tx, actor identity.Session,
 	if address != q.Address {
 		return Order{}, ErrQuoteChanged
 	}
-	if q.Method == contract.PaymentMethodCod {
-		var active bool
-		if err = tx.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM orders WHERE actor_id=$1 AND method='COD' AND status NOT IN ('DELIVERED','CANCELED','RETURNED'))`, actor.AccountID).Scan(&active); err != nil {
-			return Order{}, err
-		}
-		if active {
-			return Order{}, ErrCODActiveLimit
-		}
-	}
 	inputs := make([]contract.OrderLineInput, len(q.Prices.Lines))
 	var items int32
 	for i, l := range q.Prices.Lines {
 		inputs[i] = l.OrderLineInput
 		items += l.Qty
 	}
-	current, err := s.Catalog.Price(ctx, tx, inputs, now)
+	merchandise, err := s.Catalog.Price(ctx, tx, inputs, now)
+	if err != nil {
+		return Order{}, err
+	}
+	current, err := withDeliveryFee(ctx, tx, actor.StationID, merchandise)
+	if errors.Is(err, ErrInvalid) {
+		return Order{}, ErrQuoteChanged
+	}
 	if err != nil {
 		return Order{}, err
 	}
 	if !reflect.DeepEqual(current, q.Prices) {
 		return Order{}, ErrQuoteChanged
-	}
-	if err = validatePrices(current); err != nil {
-		return Order{}, err
 	}
 	// An order exists before any foreign-key-bearing port write. Admission below uses only the original slot.
 	a, _ := json.Marshal(q.Address)
@@ -222,14 +219,16 @@ func (s *Service) Create(ctx context.Context, tx pgx.Tx, actor identity.Session,
 		note = *in.Note
 	}
 	var id string
-	err = tx.QueryRow(ctx, `INSERT INTO orders(quote_id,actor_id,station_id,mode,method,slot_id,address_snapshot,slot_snapshot,total_fen,fee_fen,item_count,status,note,created_at) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14) RETURNING id`, q.ID, actor.AccountID, actor.StationID, q.Mode, q.Method, q.Slot.ID, a, slot, current.TotalFen, current.DeliveryFeeFen, items, status, note, now).Scan(&id)
+	err = tx.QueryRow(ctx, `INSERT INTO orders(quote_id,actor_id,station_id,mode,method,slot_id,address_snapshot,slot_snapshot,total_fen,fee_fen,item_count,status,note,created_at,cod_commission_bps)
+		VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,(SELECT cod_commission_bps FROM stations WHERE id=$3)) RETURNING id`,
+		q.ID, actor.AccountID, actor.StationID, q.Mode, q.Method, q.Slot.ID, a, slot, current.TotalFen, current.DeliveryFeeFen, items, status, note, now).Scan(&id)
 	if err != nil {
 		return Order{}, err
 	}
 	if err = s.Schedule.ReserveSlot(ctx, tx, q.Slot.ID, id, q.Mode, now); err != nil {
 		return Order{}, err
 	}
-	if err = s.Catalog.Reserve(ctx, tx, id, current); err != nil {
+	if err = s.Catalog.Reserve(ctx, tx, id, merchandise); err != nil {
 		return Order{}, err
 	}
 	for _, l := range current.Lines {

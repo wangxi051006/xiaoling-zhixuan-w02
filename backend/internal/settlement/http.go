@@ -50,6 +50,8 @@ func (h *HTTP) Register(mux *http.ServeMux) {
 	mux.HandleFunc("GET /api/v1/admin/cod/receipts", finance(h.receipts, false))
 	mux.HandleFunc("POST /api/v1/admin/cod/batches", finance(h.createBatch, true))
 	mux.HandleFunc("POST /api/v1/admin/cod/batches/{id}/verify", finance(h.verifyBatch, true))
+	mux.HandleFunc("GET /api/v1/admin/cod/merchant-settlements", finance(h.merchantSettlements, false))
+	mux.HandleFunc("POST /api/v1/admin/cod/merchant-settlements/{id}/record-payout", finance(h.recordMerchantPayout, true))
 	mux.HandleFunc("GET /api/v1/admin/refunds", h.require(h.refunds, identity.AdminEntry, false, contract.RoleOperator, contract.RoleFinance))
 	mux.HandleFunc("POST /api/v1/admin/refunds/{id}/approve", finance(h.approve, true))
 	mux.HandleFunc("POST /api/v1/admin/refunds/{id}/record-cod-payout", finance(h.payout, true))

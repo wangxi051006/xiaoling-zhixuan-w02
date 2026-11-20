@@ -48,10 +48,14 @@ func writeError(w http.ResponseWriter, r *http.Request, err error) {
 		status, code = 409, "PAYMENT_METHOD_DISABLED"
 	case errors.Is(err, settlement.ErrInsufficientBalance):
 		status, code = 409, "INSUFFICIENT_BALANCE"
-	case errors.Is(err, ErrCODActiveLimit):
-		status, code = 409, "COD_ACTIVE_LIMIT"
 	case errors.Is(err, ErrTaskClaimed):
 		status, code = 409, "TASK_ALREADY_CLAIMED"
+	case errors.Is(err, ErrOrderLimit):
+		status, code = 409, "ORDER_LIMIT_REACHED"
+	case errors.Is(err, ErrBatchCOD):
+		status, code = 409, "COD_BATCH_DELIVERY_FORBIDDEN"
+	case errors.Is(err, ErrCODClaimExclusive):
+		status, code = 409, "COD_CLAIM_EXCLUSIVE"
 	case errors.Is(err, ErrIdempotency):
 		status, code = 409, "IDEMPOTENCY_CONFLICT"
 	case errors.Is(err, ErrInvalidState), errors.Is(err, settlement.ErrInvalidState), errors.Is(err, catalog.ErrStockState), errors.Is(err, schedule.ErrSlotConflict):
@@ -62,9 +66,6 @@ func writeError(w http.ResponseWriter, r *http.Request, err error) {
 		status, code = 503, "NOT_READY"
 	case errors.As(err, &pg) && pg.Code == "23505":
 		status, code = 409, "INVALID_STATE"
-		if pg.ConstraintName == "orders_active_cod_guard" {
-			code = "COD_ACTIVE_LIMIT"
-		}
 	}
 	platform.WriteError(w, r, status, code, http.StatusText(status))
 }
@@ -139,6 +140,9 @@ func (h *HTTP) mutate(w http.ResponseWriter, r *http.Request, actor identity.Ses
 			if !bytes.Equal(prior, digest[:]) || saved == nil || *saved != status || len(response) == 0 {
 				return ErrIdempotency
 			}
+			if strings.HasPrefix(command, "riderBatch:") {
+				return h.Service.Identity.AssertRider(r.Context(), tx, actor.AccountID, actor.StationID)
+			}
 			if strings.HasPrefix(command, "rider:") {
 				// Contact access expires with assignment/fulfillment. Replay the
 				// committed command without resurrecting its historical PII view.
@@ -169,6 +173,7 @@ func (h *HTTP) mutate(w http.ResponseWriter, r *http.Request, actor identity.Ses
 				return ErrInvalidState
 			}
 			safe.Address = nil
+			safe.CODDueFen = nil
 			storedResponse, e = json.Marshal(safe)
 			if e != nil {
 				return e
@@ -215,6 +220,36 @@ func (h *HTTP) serve(w http.ResponseWriter, r *http.Request, actor identity.Sess
 		return
 	}
 	switch route {
+	case "PUT /admin/order-limits":
+		var input orderLimitsUpdate
+		h.mutate(w, r, actor, "updateOrderLimits", 200, &input, false, func(tx pgx.Tx) (commandResult, error) {
+			limits, err := updateOrderLimits(ctx, tx, actor.StationID, input)
+			return commandResult{body: limits, objectID: actor.StationID}, err
+		})
+		return
+	case "POST /admin/order-batches/accept", "POST /admin/order-batches/ready":
+		action := strings.TrimPrefix(route, "POST /admin/order-batches/")
+		var input batchInput
+		h.mutate(w, r, actor, "merchantBatch:"+action, 200, &input, false, func(tx pgx.Tx) (commandResult, error) {
+			err := s.merchantBatch(ctx, tx, actor, input.IDs, action == "accept")
+			return commandResult{body: batchResult{Count: len(input.IDs)}, objectID: actor.StationID}, err
+		})
+		return
+	case "POST /rider/task-batches/claim", "POST /rider/task-batches/deliver":
+		action := strings.TrimPrefix(route, "POST /rider/task-batches/")
+		var input batchInput
+		h.mutate(w, r, actor, "riderBatch:"+action, 200, &input, false, func(tx pgx.Tx) (commandResult, error) {
+			err := s.riderBatch(ctx, tx, actor, input.IDs, action)
+			return commandResult{body: batchResult{Count: len(input.IDs)}, objectID: actor.AccountID}, err
+		})
+		return
+	case "PUT /admin/delivery-fee":
+		var input deliveryFeeUpdate
+		h.mutate(w, r, actor, "updateDeliveryFee", 200, &input, false, func(tx pgx.Tx) (commandResult, error) {
+			fee, err := updateDeliveryFee(ctx, tx, actor.StationID, input)
+			return commandResult{body: fee, objectID: actor.StationID}, err
+		})
+		return
 	case "POST /checkout/quote":
 		var in QuoteInput
 		h.mutate(w, r, actor, "createQuote", 201, &in, false, func(tx pgx.Tx) (commandResult, error) {

@@ -23,7 +23,7 @@ func stockFixture(t *testing.T) (*pgxpool.Pool, context.Context) {
 	return stockFixtureWithIdentity(t, false)
 }
 
-// Core catalog fixtures use 000+020 only; identity HTTP fixtures opt into 010.
+// Core catalog fixtures use catalog migrations and the base schema.
 func stockFixtureWithIdentity(t *testing.T, withIdentity bool) (*pgxpool.Pool, context.Context) {
 	return stockFixtureVersion(t, withIdentity, false)
 }
@@ -71,7 +71,7 @@ func stockFixtureVersion(t *testing.T, withIdentity, legacy bool) (*pgxpool.Pool
 		if legacy && name == "020_002_reservation_digest.sql" {
 			continue
 		}
-		if !strings.HasPrefix(name, "000_") && !strings.HasPrefix(name, "020_") && !(withIdentity && strings.HasPrefix(name, "010_")) && !(withIdentity && strings.HasPrefix(name, "060_")) {
+		if !strings.HasPrefix(name, "000_") && !strings.HasPrefix(name, "020_") && !(name == "070_001_product_image_url.sql" && !legacy) && !(withIdentity && strings.HasPrefix(name, "010_")) && !(withIdentity && strings.HasPrefix(name, "060_")) {
 			continue
 		}
 		data, err := migrations.SQL.ReadFile(name)

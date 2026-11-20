@@ -111,14 +111,22 @@ AND o.method='COD' AND ((o.status='DELIVERED')<>(r.order_id IS NOT NULL));
 SELECT count(*) AS earnings_state_mismatches FROM delivery_tasks t
 JOIN orders o ON o.id=t.order_id LEFT JOIN rider_earnings e ON e.task_id=t.id
 WHERE o.station_id=:'station_id' AND
- ((t.state='DELIVERED')<>(e.id IS NOT NULL) OR (e.id IS NOT NULL AND e.amount_fen<>o.fee_fen));
-SELECT count(*) AS duplicate_active_cod_accounts FROM (
- SELECT actor_id FROM orders WHERE station_id=:'station_id' AND method='COD'
- AND status NOT IN('DELIVERED','CANCELED','RETURNED') GROUP BY actor_id HAVING count(*)>1) x;
-SELECT count(*) AS duplicate_active_riders FROM (
+ ((t.state='DELIVERED')<>(e.id IS NOT NULL) OR
+ (e.id IS NOT NULL AND (e.amount_fen<>o.fee_fen+coalesce(e.commission_fen,0) OR
+ (e.commission_fen IS NOT NULL AND
+ (o.method<>'COD' OR e.commission_fen<>round((o.total_fen-o.fee_fen)::numeric*o.cod_commission_bps/10000))))));
+SELECT count(*) AS riders_with_cod_assignment_conflicts FROM (
  SELECT rider_id FROM delivery_tasks t JOIN orders o ON o.id=t.order_id
  WHERE o.station_id=:'station_id' AND t.state IN('ASSIGNED','PICKED_UP','RETURNING')
- GROUP BY rider_id HAVING count(*)>1) x;
+ GROUP BY rider_id HAVING count(*)>1 AND bool_or(o.method='COD')) x;
+
+SELECT p.order_id,p.amount_fen,c.amount_fen-e.amount_fen AS expected_fen
+FROM cod_merchant_payouts p JOIN cod_receipts c USING(order_id)
+JOIN settlements s USING(order_id)
+JOIN delivery_tasks t ON t.order_id=c.order_id JOIN rider_earnings e ON e.task_id=t.id
+LEFT JOIN cod_batch_receipts br ON br.receipt_id=c.order_id LEFT JOIN cod_batch_verifications v USING(batch_id)
+WHERE s.station_id=:'station_id' AND
+ (p.amount_fen<>c.amount_fen-e.amount_fen OR v.difference_fen IS DISTINCT FROM 0);
 
 -- Pending/future jobs are not automatically a failure; compare due age and pre/post sets.
 SELECT kind,count(*) AS unfinished,
