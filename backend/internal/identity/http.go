@@ -153,7 +153,7 @@ func cookieValue(r *http.Request, name string) string {
 var allRoles = []contract.Role{contract.RoleCustomer, contract.RoleRider, contract.RoleOperator, contract.RoleFinance, contract.RoleSecurityAdmin}
 
 func (h *IdentityHTTP) authorized(w http.ResponseWriter, r *http.Request, entry Entry, mfa bool, roles ...contract.Role) (Session, bool) {
-	session, err := h.sessions.Lookup(r.Context(), cookieValue(r, SessionCookieName), entry)
+	session, err := h.sessions.lookup(r.Context(), cookieValue(r, SessionCookieName), entry, h.policy.local && loopbackPeer(r))
 	if err == nil {
 		err = h.policy.Authorize(r, entry, session, h.sessions.clock.Now(), mfa, roles...)
 	}

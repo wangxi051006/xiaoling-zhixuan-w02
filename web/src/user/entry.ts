@@ -1,7 +1,7 @@
 import { createApp, h, ref, onMounted, onUnmounted, watch } from 'vue';
 import { apiRequest, ApiError, assertNoProductionMock } from '../shared/api.ts';
 import type { Address, AddressInput, AddressList, AddressUpdate, Product, ProductList, Order, OrderList, OrderLineInput, Quote, QuoteInput, PaymentMethods, PaymentMethod, Slot, SlotList, Wallet, OTPChallenge, Me, OrderInput, EmailChallenge, EmailCodeRequest, EmailBindRequest } from '../shared/generated.ts';
-import { session, sessionKey, shell, money, date, today, dayAfter, id, text, btn, field, select, card, empty, badge, stateText, form } from './ui.ts';
+import { session, localTestLogin, sessionKey, shell, money, date, today, dayAfter, id, text, btn, field, select, card, empty, badge, stateText, form } from './ui.ts';
 
 const storage='xiaoling.cart';
 export function readCart():OrderLineInput[]{try{const value:unknown=JSON.parse(localStorage.getItem(storage)||'[]');return Array.isArray(value)?value.filter((x):x is OrderLineInput=>x&&typeof x.sku_id==='string'&&Number.isSafeInteger(x.qty)&&x.qty>0&&x.qty<=100).map(x=>({sku_id:x.sku_id,qty:x.qty})):[];}catch{return [];}}
@@ -15,6 +15,7 @@ export const UserApp={setup(){
  const addressForm=ref<AddressInput>({building_id:'',room:'',contact_name:'',contact_phone:''});
  const reservationDate=ref(today());let catalogGeneration=0,quoteGeneration=0,slotGeneration=0;
  const s=session(['CUSTOMER'],refresh);
+ const testLogin=localTestLogin('user',s);
  watch(()=>sessionKey(s.me.value),(value,prior)=>{if(value!==prior){addresses.value=[];address.value='';orders.value=[];detail.value=undefined;wallet.value=undefined;payment.value=undefined;invalidate();editing.value=undefined;addressForm.value={building_id:'',room:'',contact_name:'',contact_phone:''};bindEmail.value='';bindCode.value='';bindChallenge.value=undefined;}},{flush:'sync'});
  async function catalog(){const g=++catalogGeneration;const v=await s.list<ProductList>(`/catalog/products?limit=100${search.value?`&q=${id(search.value)}`:''}`);if(g===catalogGeneration)products.value=v.items;}
  async function refresh(){await catalog();if(!s.me.value)return;await Promise.all([
@@ -105,7 +106,7 @@ export const UserApp={setup(){
  onMounted(async()=>{resendTimer=window.setInterval(()=>{emailNow.value=Date.now();for(const [key,until] of cooldowns)if(until<=emailNow.value)cooldowns.delete(key);},1000);await s.recover();if(!s.me.value)try{await catalog();}catch{}});
  onUnmounted(()=>{window.clearInterval(resendTimer);});
  return ()=>shell('user','把日常，送到身边',h('div',{class:'actions'},['商品','购物袋','我的订单','地址簿','我的账号'].map(t=>btn(t==='购物袋'?`购物袋 (${cart.value.reduce((n,l)=>n+l.qty,0)})`:t,()=>{tab.value=t;},false,undefined,tab.value===t?'active':''))),[
- !s.me.value?login():null,tab.value==='商品'?catalogView():null,tab.value==='购物袋'?cartView():null,tab.value==='我的订单'?h('div',[h('div',{class:'actions'},[btn('刷新订单',()=>s.run(refresh),s.busy.value)]),detail.value?orderCard(detail.value,true):null,...orders.value.filter(o=>o.id!==detail.value?.id).map(o=>orderCard(o)),!orders.value.length?empty('还没有订单'):null]):null,tab.value==='地址簿'?(s.me.value?addressView():empty('请登录后管理地址')):null,tab.value==='我的账号'?(s.me.value?accountView():empty('请登录后查看账号')):null
+ testLogin(),!s.me.value?login():null,tab.value==='商品'?catalogView():null,tab.value==='购物袋'?cartView():null,tab.value==='我的订单'?h('div',[h('div',{class:'actions'},[btn('刷新订单',()=>s.run(refresh),s.busy.value)]),detail.value?orderCard(detail.value,true):null,...orders.value.filter(o=>o.id!==detail.value?.id).map(o=>orderCard(o)),!orders.value.length?empty('还没有订单'):null]):null,tab.value==='地址簿'?(s.me.value?addressView():empty('请登录后管理地址')):null,tab.value==='我的账号'?(s.me.value?accountView():empty('请登录后查看账号')):null
  ],s.tools(),s.status());
 }};
 export function mount(root:HTMLElement){assertNoProductionMock(import.meta.env.PROD,import.meta.env.VITE_ENABLE_MOCK);return createApp(UserApp).mount(root);}

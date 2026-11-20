@@ -8,8 +8,9 @@
       ['riders', '骑手', '<circle cx="12" cy="8.5" r="3.6"/><path d="M4.8 20c1-3.6 3.9-5.6 7.2-5.6s6.2 2 7.2 5.6"/>']
     ];
     return '<nav class="tabbar">' + items.map(function (it) {
-      return '<a class="' + (active === it[0] ? 'on' : '') + '" data-act="tab" data-val="' + it[0] + '">' +
-        '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6">' + it[2] + '</svg>' + it[1] + '</a>';
+      var on = active === it[0];
+      return '<button class="' + (on ? 'on' : '') + '"' + (on ? ' aria-current="page"' : '') + ' data-act="tab" data-val="' + it[0] + '">' +
+        '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true">' + it[2] + '</svg>' + it[1] + '</button>';
     }).join('') + '</nav>' + homebar();
   }
 
@@ -26,16 +27,23 @@
     var bars = week ? [72, 64, 81, 68, 90, 86, 96] : [38, 52, 44, 66, 58, 78, 92];
     var labels = week ? ['一', '二', '三', '四', '五', '六', '日'] : ['12', '13', '14', '15', '16', '17', '18'];
     var peak = week ? 96 : 92;
+    var todos = a.todos.map(function (t, index) { return { item: t, index: index }; });
+    todos.sort(function (a, b) { return Number(a.item.done) - Number(b.item.done); });
     return statusbar() +
       '<div class="scroll" style="padding-top:4px">' +
         '<div class="ahead" style="display:flex;align-items:flex-end;justify-content:space-between">' +
-          '<div><div class="small muted" style="letter-spacing:.14em">经营手账 · 北苑仓</div>' +
-            '<h1 class="h-serif" style="font-size:22px;margin-top:5px">' + (week ? '本周过得不错' : '今天过得还不错') + '</h1></div>' +
+          '<div><div class="small muted">北苑仓 · 经营手账</div>' +
+            '<h1 class="h-serif" style="font-size:24px;margin-top:5px">运营看板</h1></div>' +
           '<div class="range" style="display:flex;border:1px solid var(--line);border-radius:8px;overflow:hidden;background:var(--card)">' +
             [['today', '今日'], ['week', '本周']].map(function (r) {
               return '<button class="chip ' + (a.range === r[0] ? 'on' : '') + '" style="border:0;border-radius:0;padding:6px 10px;font-size:9.5px" data-act="aRange" data-val="' + r[0] + '">' + r[1] + '</button>';
             }).join('') + '</div></div>' +
-        '<div class="a-kpis" style="margin-top:14px">' +
+        '<section class="admin-todos"><div class="row-between"><h2>待处理事项</h2><span>' + a.todos.filter(function (t) { return !t.done; }).length + ' 件待处理</span></div>' +
+          todos.map(function (entry) {
+            var t = entry.item;
+            return '<button class="a-todo ' + (t.done ? 'cked' : '') + '" aria-pressed="' + t.done + '" data-act="aTodo" data-val="' + entry.index + '"><span class="ck" aria-hidden="true"></span><span class="todo-text">' + esc(t.t) + '</span><span class="todo-due">' + (t.done ? '已完成' : t.due) + '</span></button>';
+          }).join('') + '</section>' +
+        '<div class="sechead"><h2>经营概览</h2></div><div class="a-kpis">' +
           kpi('营业额', '¥' + Math.round(gmv).toLocaleString(), week ? '上周 72,000' : '比昨天多卖 1,910', '+18%') +
           kpi('订单', cnt, week ? '日均 345 单' : '待处理 ' + (12 + extra) + ' 单', '+9%') +
           kpi('客单价', '¥32.3', '两件以上 61%') +
@@ -50,10 +58,6 @@
         '<div class="card a-feed" style="margin-bottom:12px"><div class="row-between" style="margin-bottom:4px"><b class="h-serif" style="font-size:12px">实时动态</b><span class="small muted">每 10 秒刷新</span></div>' +
           a.feed.map(function (f) {
             return '<div class="f"><time>' + f.t + '</time><i class="' + f.dot + '"></i><div>' + f.text + '</div><span style="margin-left:auto;color:#A29888;font-size:8.5px">' + f.tag + '</span></div>';
-          }).join('') + '</div>' +
-        '<div class="card"><div class="row-between" style="margin-bottom:4px"><b class="h-serif" style="font-size:12px">今天还要做</b><span class="small muted">' + a.todos.filter(function (t) { return !t.done; }).length + ' 件</span></div>' +
-          a.todos.map(function (t, i) {
-            return '<div class="a-todo ' + (t.done ? 'cked' : '') + '" data-act="aTodo" data-val="' + i + '"><span class="ck"></span><div>' + t.t + '</div><span>' + t.due + '</span></div>';
           }).join('') + '</div>' +
         '<div style="height:14px"></div>' +
       '</div>' + aTab('dash');

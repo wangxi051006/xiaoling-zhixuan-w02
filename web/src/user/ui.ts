@@ -1,4 +1,4 @@
-import { h, ref, watch, type VNodeChild } from 'vue';
+import { h, onMounted, ref, watch, type VNodeChild } from 'vue';
 import { apiRequest, ApiError } from '../shared/api.ts';
 import type { Me, Role } from '../shared/generated.ts';
 import './style.css';
@@ -50,4 +50,33 @@ export function session(roles:Role[],refresh:()=>Promise<unknown>){
  function tools(){return h('div',{class:'session'},[me.value?h('span',{'data-testid':'session-ready'},`站点 ${me.value.station_id} · ${me.value.roles.join(' / ')}`):h('span','尚未登录'),btn('恢复会话',()=>recover(true),busy.value,'recover-session'),me.value?btn('退出登录',()=>write('/auth/logout',undefined,()=>{me.value=undefined;ready.value=false;notice.value='已退出登录';}),busy.value):null,h('a',{href:'/api/v1/auth/staff/start'},'员工登录 / MFA')]);}
  return {me,error,notice,busy,pending,ready,get,list,recover,run,write,failure,status,tools};
 }
+export function localTestLogin(entry: 'user' | 'rider' | 'admin', s: ReturnType<typeof session>) {
+ const enabled = ref(false), account = ref(''), password = ref('');
+ const path = '/auth/test/login';
+ onMounted(async () => {
+  if (location.hostname !== `${entry}.localhost`) return;
+  try {
+   const result = await apiRequest<{entry: string}>(path, {signal: AbortSignal.timeout(5000)});
+   enabled.value = result?.entry === entry;
+  } catch { /* Test mode is unavailable; keep the normal sign-in options. */ }
+ });
+ watch(s.me, value => { if (value) { account.value = ''; password.value = ''; } });
+ return () => enabled.value && !s.me.value ? card('本地测试登录', [form([
+  field('账号', account.value, v => account.value = v, 'text', {required: true, inputmode: 'numeric', autocomplete: 'username', maxlength: 64, disabled: s.busy.value}),
+  field('密码', password.value, v => password.value = v, 'password', {required: true, autocomplete: 'off', maxlength: 64, disabled: s.busy.value, 'data-sensitive': true}),
+  h('button', {type: 'submit', class: 'btn primary', disabled: s.busy.value || !account.value || !password.value}, '测试登录'),
+ ], () => s.run(async () => {
+  const body = {account: account.value.trim(), password: password.value};
+  password.value = '';
+  try {
+   await apiRequest<void>(path, {method: 'POST', body, signal: AbortSignal.timeout(10000)});
+  } catch (e) {
+   if (e instanceof ApiError && e.status === 401) { s.error.value = '账号或密码不正确。'; return; }
+   throw e;
+  }
+  await s.recover();
+  if (!s.me.value && !s.error.value) s.error.value = '未能恢复测试会话，请重新登录。';
+ }))], {'data-testid': 'test-login'}) : null;
+}
+
 export function shell(role:string,title:string,tabs:VNodeChild,body:VNodeChild,tools:VNodeChild,status:VNodeChild){return h('main',{'data-entry':role,class:`app ${role}`},[h('header',{class:'masthead'},[h('div',{class:'brand'},[h('span',{class:'logo','aria-hidden':'true'},'零'),h('div',[h('small','校零智选 · 校园生活手账'),h('h1',title)])]),tools]),h('nav',{'aria-label':'主要功能',class:'tabs'},[tabs]),status,h('div',{class:'content'},[body]),h('footer','校零智选 · 时间按 Asia/Shanghai 显示 · 订单状态以服务器为准')]);}

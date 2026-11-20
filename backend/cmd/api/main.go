@@ -75,7 +75,11 @@ func run(ctx context.Context, logger *slog.Logger, args []string) error {
 	clock := contract.SystemClock{}
 	var staff *identity.StaffOIDC
 	if cfg.StaffOIDC != nil {
-		policy, err := identity.NewEntryPolicy(cfg.UserOrigin, cfg.RiderOrigin, cfg.AdminOrigin)
+		entryPolicy := identity.NewEntryPolicy
+		if cfg.AllowTestAuth {
+			entryPolicy = identity.NewLocalEntryPolicy
+		}
+		policy, err := entryPolicy(cfg.UserOrigin, cfg.RiderOrigin, cfg.AdminOrigin)
 		if err != nil {
 			return errors.New("invalid identity entry configuration")
 		}
@@ -107,8 +111,19 @@ func run(ctx context.Context, logger *slog.Logger, args []string) error {
 		notifier = outbox
 	}
 	orders := &fulfillment.Service{Pool: pool, Clock: clock, Identity: directory, Catalog: catalog.Store{Clock: clock}, Schedule: schedule.Store{}, Settlement: settlement.Store{Policy: payments}, RiderState: directory, AlertSink: newOrderAlertLog(logger), EmailNotifier: notifier, Policy: payments, AcceptNewOrders: cfg.OrdersEnabled, AllowDispatch: cfg.DispatchEnabled}
-	handler, err := bootstrap.NewApplication(bootstrap.ApplicationOptions{Pool: pool, Clock: clock, UserOrigin: cfg.UserOrigin, RiderOrigin: cfg.RiderOrigin, AdminOrigin: cfg.AdminOrigin, Payments: payments, Emails: emails, Staff: staff, Logger: logger, Orders: orders})
+	options := bootstrap.ApplicationOptions{Pool: pool, Clock: clock, UserOrigin: cfg.UserOrigin, RiderOrigin: cfg.RiderOrigin, AdminOrigin: cfg.AdminOrigin, Payments: payments, Emails: emails, Staff: staff, Logger: logger, Orders: orders}
+	var handler http.Handler
+	if cfg.AllowTestAuth {
+		setupCtx, cancel := context.WithTimeout(ctx, 10*time.Second)
+		defer cancel()
+		handler, err = bootstrap.NewLocalTestApplication(setupCtx, options)
+	} else {
+		handler, err = bootstrap.NewApplication(options)
+	}
 	if err != nil {
+		if cfg.AllowTestAuth {
+			return err
+		}
 		return errors.New("business application configuration is incomplete")
 	}
 	workerCtx, stopWorker := context.WithCancel(ctx)

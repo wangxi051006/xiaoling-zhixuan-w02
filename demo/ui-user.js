@@ -8,8 +8,9 @@
       ['me', '我的', '<circle cx="12" cy="8.5" r="3.6"/><path d="M4.8 20c1-3.6 3.9-5.6 7.2-5.6s6.2 2 7.2 5.6"/>']
     ];
     return '<nav class="tabbar">' + items.map(function (it) {
-      return '<a class="' + (active === it[0] ? 'on' : '') + '" data-act="tab" data-val="' + it[0] + '">' +
-        '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6">' + it[2] + '</svg>' + it[1] + '</a>';
+      var on = active === it[0];
+      return '<button class="' + (on ? 'on' : '') + '"' + (on ? ' aria-current="page"' : '') + ' data-act="tab" data-val="' + it[0] + '">' +
+        '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true">' + it[2] + '</svg>' + it[1] + '</button>';
     }).join('') + '</nav>' + homebar();
   }
 
@@ -56,43 +57,39 @@
   VIEWS.user.home = function () {
     var list = filtered(state.search, '全部');
     var cats = ['全部', '冰饮', '零食', '文具', '日用'];
-    var promos = promoList();
+    var pick = byId('p3');
+    var promos = promoList().filter(function (p) { return p.stock > 0 && promoBestTier(p); });
     return statusbar() +
       '<div class="scroll">' +
-        '<div class="hello"><div><div class="k">11 月 18 日 · 周二 · 有晚课</div><b>晚上好，小满</b></div>' + bagBtn() + '</div>' +
-        '<div class="loc" data-act="addrSheet">' +
+        '<div class="hello"><div><div class="k">校零智选 · 北苑校园店</div><h1>宿舍采购清单</h1></div>' + bagBtn() + '</div>' +
+        '<button class="loc" data-act="addrSheet">' +
           '<svg width="11" height="13" viewBox="0 0 12 15" fill="none" stroke="currentColor" stroke-width="1.4"><path d="M6 1.5c2.6 0 4.6 2 4.6 4.5 0 3.2-4.6 7.5-4.6 7.5S1.4 9.2 1.4 6C1.4 3.5 3.4 1.5 6 1.5z"/><circle cx="6" cy="6" r="1.5"/></svg>' +
-          '配送至 <b>' + state.me.addrs[state.checkout.addrIndex].name + '</b><span class="t">30 分钟达</span>' +
+          '配送至 <b>' + esc(state.me.addrs[state.checkout.addrIndex].name) + '</b><span class="t">约 30 分钟</span>' +
           '<svg width="9" height="6" viewBox="0 0 9 6" fill="none" stroke="currentColor" stroke-width="1.4"><path d="M1 1l3.5 3.4L8 1"/></svg>' +
-        '</div>' +
+        '</button>' +
         '<div class="search">' +
           '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="10.5" cy="10.5" r="6.5"/><path d="M15.5 15.5L21 21"/></svg>' +
-          '<input data-input="search" value="' + esc(state.search) + '" placeholder="搜零食、冰饮、文具">' +
-          '<button class="go" data-act="soon" data-val="演示版：扫码找货"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.4"><path d="M12 5v14M5 12h14"/></svg></button>' +
+          '<input type="search" data-input="search" aria-label="搜索商品" value="' + esc(state.search) + '" placeholder="搜零食、冰饮、文具">' +
         '</div>' +
         '<div class="catrow">' + cats.map(function (c, i) {
-          return '<div class="cat" data-act="openCat" data-val="' + c + '"><i>' + catIcon(i) + '</i>' + c + '</div>';
+          return '<button class="cat" data-act="openCat" data-val="' + c + '"><i>' + catIcon(i) + '</i>' + c + '</button>';
         }).join('') + '</div>' +
-        '<div class="note"><span class="tape"></span>' +
+        (pick && pick.shelf && pick.stock > 0 ? '<div class="note home-note"><span class="tape"></span>' +
           '<div class="nt"><h3 class="h-serif">今晚的推荐</h3><span>20:00–23:00</span></div>' +
-          '<p>夜宵组合：红烧牛肉面 + 气泡水，凑单后 ¥8.5，比单买省 ¥1。</p>' +
-          '<div class="row"><span class="mini">够 2 人吃</span><span class="mini">19 分钟到</span>' +
-          '<span class="cta" data-act="openP" data-val="p3">去看看</span></div>' +
-        '</div>' +
-        '<div class="sechead"><h2>限时促销 <small>' + promos.length + ' 件</small></h2><span class="more">今日 24:00 结束</span></div>' +
-        (promos.length
-          ? '<div class="promo-row">' + promos.map(function (p) {
-              var best = promoBestTier(p);
-              return '<div class="pcard2" data-act="openP" data-val="' + p.id + '">' +
-                '<div class="pimg2 ' + p.tone + '"><span></span><u>低至 ' + offLabel(best.off) + '</u></div>' +
-                '<b>' + p.name + '</b>' +
-                '<div class="pp"><b>¥' + promoLowPrice(p).toFixed(1) + '</b><s>¥' + p.price.toFixed(1) + '</s></div></div>';
-            }).join('') + '</div>'
-          : '<p class="small muted" style="padding:0 0 6px">暂无促销，去管理端给商品设一个 →</p>') +
+          '<div class="note-buy"><p>' + esc(pick.name) + ' <strong>' + money(unitPrice(pick, 1)) + '</strong></p>' +
+          '<button class="cta" data-act="openP" data-val="' + pick.id + '">查看商品</button></div>' +
+        '</div>' : '') +
         '<div class="sechead"><h2 id="secTitle">' + (state.search.trim() ? '搜索「' + esc(state.search.trim()) + '」' : '常买清单') + '<small>共 ' + list.length + ' 件</small></h2>' +
-          '<span class="more" data-act="go" data-val="category">全部 →</span></div>' +
+          '<button class="more" data-act="openCat" data-val="全部">全部 →</button></div>' +
         '<div class="grid" id="goodsGrid">' + (list.length ? tiles(list) : '') + '</div>' +
-        (list.length ? '' : emptyState('没有找到相关商品', '换个关键词试试，比如「薯片」「冰饮」')) +
+        '<div id="homeEmpty"' + (list.length ? ' hidden' : '') + '>' + emptyState('没有找到相关商品', '换个关键词试试，比如「薯片」「冰饮」') + '</div>' +
+        (promos.length ? '<section id="homePromos"' + (state.search.trim() ? ' hidden' : '') + '>' +
+          '<div class="sechead"><h2>限时促销 <small>' + promos.length + ' 件</small></h2></div>' +
+          '<div class="promo-row">' + promos.map(function (p) {
+            return '<button class="pcard2" data-act="openP" data-val="' + p.id + '">' +
+              '<span class="pimg2 ' + p.tone + '"><span></span><u>低至 ' + offLabel(promoBestTier(p).off) + '</u></span>' +
+              '<b>' + esc(p.name) + '</b><span class="pp"><b>' + money(promoLowPrice(p)) + '</b><s>' + money(p.price) + '</s></span></button>';
+          }).join('') + '</div></section>' : '') +
         '<div style="height:16px"></div>' +
       '</div>' + uTab('home');
   };

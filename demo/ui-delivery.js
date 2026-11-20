@@ -9,16 +9,20 @@
     ];
     return '<nav class="tabbar">' + items.map(function (it) {
       var on = active === it[0] || (active === 'task' && it[0] === 'hall');
-      return '<a class="' + (on ? 'on' : '') + '" data-act="tab" data-val="' + it[0] + '">' +
-        '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6">' + it[2] + '</svg>' + it[1] + '</a>';
+      return '<button class="' + (on ? 'on' : '') + '"' + (on ? ' aria-current="page"' : '') + ' data-act="tab" data-val="' + it[0] + '">' +
+        '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true">' + it[2] + '</svg>' + it[1] +
+        (it[0] === 'hall' && unreadMsg() ? '<span class="task-alert-dot" aria-label="有未读催单"></span>' : '') + '</button>';
     }).join('') + '</nav>' + homebar();
   }
 
   function ticket(a, stage) {
     var steps = ['取货', '配送', '送达'];
-    return '<div class="ticket" style="margin-top:12px">' +
-      '<div class="tk-top"><span class="id">' + a.no + ' · ' + a.at + '</span><span class="stamp">急</span></div>' +
-      '<div class="tk-title"><h3>' + a.addr + '</h3><p>' + a.km + ' · ' + a.items + ' 件 · 配送费 ' + money(a.fee) + '</p></div>' +
+    var alert = stage < 2 ? orderUrgency(a.no) : null;
+    var order = orderByNo(a.no);
+    return '<div class="ticket' + (alert && !alert.read ? ' ticket-urgent' : '') + '">' +
+      urgencyHtml(alert) +
+      '<div class="tk-top"><span class="id">#' + esc(a.no) + ' · ' + esc(a.at) + ' 接单</span><span class="task-status">' + ['待取货', '配送中', '已送达'][stage] + '</span></div>' +
+      '<div class="tk-title"><h3>' + esc(a.addr) + '</h3><p>' + (a.eta && stage < 2 ? '预计 ' + esc(a.eta) + ' 送达 · ' : '') + esc(a.km) + ' · ' + a.items + ' 件</p></div>' +
       '<div class="tk-dash"></div>' +
       '<div style="padding:0 14px"><div class="d-steps">' + steps.map(function (s, i) {
         var cls = i < stage ? 'on' : (i === stage ? 'now' : '');
@@ -28,11 +32,10 @@
         '<div class="row" style="border:0;padding:6px 0"><span class="ic" style="width:26px;height:26px;border-radius:9px;background:rgba(53,102,79,.1);color:var(--green)">取</span>' +
           '<div><b>北苑仓 A-12 货架</b><small>' + (stage > 0 ? '已取货 · 商品已核对' : '待取货 · 报单号 ' + a.no) + '</small></div></div>' +
         '<div class="row" style="border:0;padding:6px 0"><span class="ic" style="width:26px;height:26px;border-radius:9px;background:rgba(217,96,58,.12);color:var(--red)">送</span>' +
-          '<div><b>' + a.addr + '</b><small>备注：放门口，谢谢 · 到了发条消息</small></div></div>' +
+          '<div><b>' + esc(a.addr) + '</b><small>' + (order && order.note ? '备注：' + esc(order.note) : '无配送备注') + '</small></div></div>' +
       '</div>' +
       '<div class="tk-dash"></div>' +
-      '<div class="tk-foot"><div class="sum"><b>' + a.items + ' 件商品</b>超时前送达可拿全额</div>' +
-        '<button class="btn sm ghost" data-act="contact">联系买家</button></div></div>';
+      '<div class="tk-foot"><div class="sum"><b>' + a.items + ' 件商品</b>配送费 ' + money(a.fee) + '</div></div></div>';
   }
 
   VIEWS.delivery.hall = function () {
@@ -44,7 +47,7 @@
     }).join('');
     return statusbar() +
       '<div class="scroll" style="padding-top:4px">' +
-        '<div class="d-top"><div class="who">今天第 ' + (d.done + 1) + ' 单<b class="h-serif">' + (d.active ? '配送中' : '待接单') + '</b></div>' +
+        '<div class="d-top"><div class="who">北苑站 · 配送手账<b class="h-serif">' + (d.active ? '当前任务' : '待接单') + '</b></div>' +
           '<div style="display:flex;align-items:center;gap:7px">' +
             '<button class="bell" data-act="dMsg" aria-label="消息提醒">' +
               '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M6 9a6 6 0 1 1 12 0c0 5 2 6 2 6H4s2-1 2-6z"/><path d="M10 19a2 2 0 0 0 4 0"/></svg>' +
@@ -52,18 +55,17 @@
             '</button>' +
             '<button class="d-switch ' + (d.online ? '' : 'off') + '" data-act="dOnline"><i></i>' + (d.online ? '接单中' : '已收工') + '</button>' +
           '</div></div>' +
-        '<div class="d-brief"><div><span>今日收入</span><b><i>¥</i>' + d.income.toFixed(1) + '</b></div>' +
-          '<div><span>已送达</span><b>' + d.done + '</b></div>' +
-          '<div><span>评分</span><b>4.98</b></div></div>' +
         (d.active ? ticket(d.active, d.active.stage) +
-          '<button class="btn primary block" style="margin-top:12px" data-act="openTask">继续配送 →</button>'
-          : '<div class="note" style="margin-top:2px"><span class="tape"></span><div class="nt"><h3 class="h-serif">现在没在跑单</h3><span>' + (d.online ? '听单中' : '已收工') + '</span></div>' +
-            '<p>' + (d.online ? '附近有 ' + d.avail.length + ' 单待抢，最近一单 0.8 km。' : '上线后才能接到新单，点右上角开关。') + '</p>' +
-            '<div class="row"><span class="mini">在线 3h12m</span><span class="mini">准时率 98%</span></div></div>') +
+          '<button class="btn primary block task-action" data-act="' + (d.active.stage === 2 ? 'finishTask' : 'openTask') + '">' + (d.active.stage === 2 ? '返回大厅接下一单' : '查看当前任务 →') + '</button>'
+          : '<div class="card"><b>暂无进行中的任务</b><p class="small muted">' + (d.online ? '附近有 ' + d.avail.length + ' 单待接' : '已收工') + '</p></div>') +
+        '<button class="alert-entry" data-act="alertSettings">催单提醒设置 <span>' + (alertPrefs.armed && (alertPrefs.voice || alertPrefs.vibrate) ? '管理震动与语音' : '文字提醒') + ' ›</span></button>' +
         '<div class="sechead"><h2>附近可接 <small>' + d.avail.length + ' 单</small></h2>' +
           '<button class="refresh" data-act="refresh"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M20 11a8 8 0 1 0-2.3 6"/><path d="M20 5v6h-6"/></svg>刷新<span id="refreshHint">10s</span></button></div>' +
         (avail || '<p class="small muted" style="padding:6px 0 14px">附近暂时没有新单，等一等。</p>') +
         '<div class="divider"><span>今日记录</span><i></i></div>' +
+        '<div class="d-brief"><div><span>今日收入</span><b>' + money(d.income) + '</b></div>' +
+          '<div><span>已送达</span><b>' + d.done + '</b></div>' +
+          '<div><span>评分</span><b>4.98</b></div></div>' +
         d.records.slice(0, 3).map(function (r) {
           return '<div class="row"><div><b>' + r.no + '</b><small>' + r.t + ' 已送达</small></div><span class="rt">+' + money(r.fee) + '</span></div>';
         }).join('') +
@@ -84,15 +86,14 @@
       '<div class="scroll" style="padding-top:2px">' +
         '<div class="nav"><button class="back" data-act="tab" data-val="hall"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M15 5l-7 7 7 7"/></svg></button>' +
           '<h1>当前任务</h1><span class="rt">' + a.km + '</span></div>' +
-        ticket(a, a.stage) +
+        ticket(a, a.stage) + btn +
         '<div class="card" style="margin-top:12px"><div class="co-h">时间与收入</div>' +
           '<div class="co-line"><span>接单时间</span><b>' + a.at + '</b></div>' +
-          '<div class="co-line"><span>预计送达</span><b>' + (a.stage === 2 ? '已送达' : '20:31 前') + '</b></div>' +
+          '<div class="co-line"><span>预计送达</span><b>' + (a.stage === 2 ? '已送达' : (a.eta || '待更新')) + '</b></div>' +
           '<div class="co-line total"><span>本单收入</span><b>' + money(a.fee) + '</b></div></div>' +
         '<div style="display:flex;gap:9px;margin-top:12px">' +
           '<button class="btn block ghost" data-act="contact">联系买家</button>' +
           '<button class="btn block ghost" data-act="soon" data-val="演示版：异常上报（联系站长）">异常上报</button></div>' +
-        btn +
         (a.stage === 2 ? '<div class="note" style="margin-top:12px"><span class="tape"></span><div class="nt"><h3 class="h-serif">这一单完成了</h3><span>+' + money(a.fee) + '</span></div>' +
           '<p>收入已计入今日，可在「收入」里查看明细并提现。</p></div>' : '') +
         '<div style="height:16px"></div>' +
@@ -109,10 +110,12 @@
   }
   function dCard(o) {
     var m = statusMeta(o.status);
+    var alert = orderUrgency(o.no);
     var count = o.items.reduce(function (a, i) { return a + i.qty; }, 0);
     return '<div class="dord" data-act="dOrder" data-val="' + o.no + '">' +
       '<div class="dt"><span class="no">' + o.no + '</span><span class="pill st ' + m[0] + '">' + m[1] + '</span><span class="tm">' + o.created + '</span></div>' +
       '<div class="da">' + o.addr + '</div>' +
+      (alert && !alert.read ? '<p class="order-urgent-label">急 · ' + alert.text + ' · ' + alert.t + '</p>' : '') +
       '<div class="dc">' + (o.contact || '—') + ' · ' + maskPhone(o.phone) + '</div>' +
       '<div class="df"><span>' + count + ' 件 · ' + o.pay + '</span><b>' + money(orderTotal(o)) + '</b></div></div>';
   }
@@ -174,6 +177,7 @@
       '<div class="scroll" style="padding-top:6px">' +
         '<div class="me-head"><div class="av">李</div><div><b>李海</b><small>北苑站 · 骑手 0231 · 铜牌</small></div></div>' +
         '<div class="me-stats"><div><b>' + d.done + '</b><span>今日单量</span></div><div><b>4.98</b><span>评分</span></div><div><b>27</b><span>本周单量</span></div></div>' +
+        '<button class="alert-entry" data-act="alertSettings">催单提醒设置 <span>震动与语音 ›</span></button>' +
         '<div class="card" style="margin-top:12px;padding:4px 14px">' +
           '<div class="row"><span class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M4 12h4l2-3 4 6 2-3h4"/></svg></span><div><b>接单状态</b><small>' + (d.online ? '在线 · 正在听单' : '已收工') + '</small></div>' +
             '<span class="tg ' + (d.online ? 'on' : '') + '" data-act="dOnline" style="margin-left:auto"></span></div>' +

@@ -17,6 +17,7 @@ type Config struct {
 	UserOrigin, RiderOrigin, AdminOrigin string
 	CODEnabled, BalanceEnabled           bool
 	OrdersEnabled, DispatchEnabled       bool
+	AllowTestAuth                        bool
 	EmailSignupEnabled                   bool
 	EmailNotificationsEnabled            bool
 	Emails                               *EmailSettings
@@ -73,11 +74,33 @@ func LoadConfig(get func(string) string) (Config, error) {
 				return Config{}, errors.New("unsupported production database URL parameter")
 			}
 		}
-		if flag := get("ALLOW_TEST_AUTH"); flag != "" && flag != "false" {
-			return Config{}, errors.New("test authentication is forbidden in production")
-		}
 	}
 	cfg.UserOrigin, cfg.RiderOrigin, cfg.AdminOrigin = get("USER_ORIGIN"), get("RIDER_ORIGIN"), get("ADMIN_ORIGIN")
+	switch get("ALLOW_TEST_AUTH") {
+	case "", "false":
+	case "true":
+		if cfg.Environment == "production" {
+			return Config{}, errors.New("test authentication is forbidden in production")
+		}
+		if _, err := identity.NewLocalEntryPolicy(cfg.UserOrigin, cfg.RiderOrigin, cfg.AdminOrigin); err != nil {
+			return Config{}, err
+		}
+		if !net.ParseIP(db.Hostname()).IsLoopback() {
+			return Config{}, errors.New("test authentication requires a loopback database IP")
+		}
+		query, err := url.ParseQuery(db.RawQuery)
+		if err != nil {
+			return Config{}, errors.New("invalid local database URL parameters")
+		}
+		for key, values := range query {
+			if len(values) != 1 || (key != "sslmode" && key != "connect_timeout") {
+				return Config{}, errors.New("unsupported local test database URL parameter")
+			}
+		}
+		cfg.AllowTestAuth = true
+	default:
+		return Config{}, errors.New("ALLOW_TEST_AUTH must be true or false")
+	}
 	for key, target := range map[string]*bool{"COD_ENABLED": &cfg.CODEnabled, "BALANCE_ENABLED": &cfg.BalanceEnabled, "ORDERS_ENABLED": &cfg.OrdersEnabled, "DISPATCH_ENABLED": &cfg.DispatchEnabled} {
 		switch get(key) {
 		case "", "false":

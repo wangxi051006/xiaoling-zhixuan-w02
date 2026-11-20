@@ -1,12 +1,13 @@
 import { createApp, h, ref, onMounted, onUnmounted, watch } from 'vue';
 import { ApiError, assertNoProductionMock } from '../shared/api.ts';
 import type { LobbyTask, LobbyTaskList, RiderTask, Earning, EarningList, Message, MessageList, Availability, DeliverInput, Me } from '../shared/generated.ts';
-import { session, sessionKey, shell, money, date, today, id, btn, field, check, card, empty, badge } from '../user/ui.ts';
+import { session, localTestLogin, sessionKey, shell, money, date, today, id, btn, field, check, card, empty, badge } from '../user/ui.ts';
 
 export const RiderApp={setup(){
  const tab=ref('站点大厅'),tasks=ref<LobbyTask[]>([]),history=ref<LobbyTask[]>([]),earnings=ref<Earning[]>([]),messages=ref<Message[]>([]),current=ref<RiderTask>(),available=ref<boolean>(),cash=ref(false),reason=ref('CUSTOMER_REFUSED'),incomeDate=ref(today()),lastUpdated=ref(''),polling=ref(false);
  let timer:ReturnType<typeof setTimeout>|undefined,controller:AbortController|undefined,generation=0,failures=0,disposed=false;
  const s=session(['RIDER'],refresh);
+ const testLogin=localTestLogin('rider',s);
  watch(()=>sessionKey(s.me.value),(value,prior)=>{if(value!==prior){invalidate();tasks.value=[];history.value=[];earnings.value=[];messages.value=[];current.value=undefined;available.value=undefined;cash.value=false;lastUpdated.value='';}},{flush:'sync'});
  function invalidate(){generation++;controller?.abort();controller=undefined;clearTimeout(timer);polling.value=false;}
  function schedule(){clearTimeout(timer);if(disposed||document.hidden||!s.me.value)return;timer=setTimeout(()=>{void poll();},Math.min(60000,10000*2**Math.min(failures,3)));}
@@ -45,7 +46,7 @@ export const RiderApp={setup(){
  onMounted(async()=>{document.addEventListener('visibilitychange',visibility);await s.recover();schedule();});
  onUnmounted(()=>{disposed=true;invalidate();document.removeEventListener('visibilitychange',visibility);});
  return ()=>shell('rider','把每一程，稳稳送好',h('div',{class:'actions'},['站点大厅','当前任务','消息','历史与收入'].map(t=>btn(t,()=>tab.value=t,false,undefined,tab.value===t?'active':''))),[
- !s.me.value?card('员工登录与权限恢复',[h('p','请通过当前骑手入口的员工登录恢复会话。失效或停用的会话不能继续领取或履约。'),h('a',{href:'/api/v1/auth/staff/start'},'前往员工登录')]):null,
+ testLogin(),!s.me.value?card('员工登录与权限恢复',[h('p','请通过当前骑手入口的员工登录恢复会话。失效或停用的会话不能继续领取或履约。'),h('a',{href:'/api/v1/auth/staff/start'},'前往员工登录')]):null,
  s.me.value?h('div',{class:'note'},[h('h2',available.value===undefined?'接单状态待确认':available.value?'已上线，准备出发':'已下线'),h('p',available.value===undefined?'契约没有当前在线状态读取接口，可向服务器确认上线或下线。':'状态来自最近一次服务器确认。'),h('div',{class:'actions'},[btn('上线接单',()=>setAvailability(true),s.busy.value,'go-online','primary'),btn('下线休息',()=>setAvailability(false),s.busy.value,'go-offline'),btn('刷新任务',()=>s.run(refresh),s.busy.value||polling.value,'refresh-tasks')]),h('p',{class:'muted'},lastUpdated.value?`最近刷新 ${date(lastUpdated.value)} · 页面隐藏时暂停轮询`:'等待服务器数据'),h('p',{class:'muted'},'工作窗口以每个任务的服务器时段显示。独立排班接口尚未提供。'),btn('设置工作时段',()=>{},true)]):null,
  s.me.value?(tab.value==='站点大厅'?(tasks.value.length?h('div',{class:'grid'},tasks.value.map(hallTask)):empty('大厅暂无可接任务')):tab.value==='当前任务'?detail():tab.value==='消息'?messagesView():pastView()):null
  ],s.tools(),s.status());

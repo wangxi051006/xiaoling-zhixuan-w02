@@ -32,6 +32,7 @@ for (const role of ['user', 'rider', 'admin']) {
         const response = await page.goto(url);
         assert.equal(response.status(), 200);
         await page.locator(`main[data-entry="${role}"]`).waitFor();
+        assert.equal(await page.getByTestId('test-login').count(), 0);
         assert.equal(await page.getByRole('heading', { level: 1 }).count(), 1);
         assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), true);
         assert.deepEqual(errors, []);

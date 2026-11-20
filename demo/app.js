@@ -77,6 +77,10 @@ function seedTodos() {
     { t: '夜宵套餐 明天是否续档', due: '库存不足', done: false }
   ];
 }
+function seedActiveTask() {
+  return { no: 'A2381', addr: '北苑 3 号楼 · 508', km: '2.1 km', items: 3, fee: 7.5, stage: 1, at: '20:04', eta: '20:31' };
+}
+
 var state = {
   client: 'user',
   route: { user: 'home', delivery: 'hall', admin: 'dash' },
@@ -93,7 +97,7 @@ var state = {
   lastNo: null,
   deliver: {
     online: true,
-    active: null,
+    active: seedActiveTask(),
     done: 12,
     income: 86.4,
     last: Date.now(),
@@ -102,7 +106,7 @@ var state = {
     tab: 'active',
     q: '',
     range: 'all',
-    msgs: [{ t: '20:12', text: '订单 A2381，管理员提醒你尽快配送', type: 'admin', read: false }],
+    msgs: [],
     avail: [
       { id: 'T1', no: 'A2384', addr: '学苑 6 号楼 · 302', km: '0.8 km', items: 4, fee: 7.5, min: 12, tag: '刚下单' },
       { id: 'T2', no: 'A2383', addr: '图书馆东门 · 自提柜', km: '1.3 km', items: 2, fee: 6.0, min: 2, tag: '2 分钟前' },
@@ -147,6 +151,14 @@ var state = {
 };
 
 var VIEWS = { user: {}, delivery: {}, admin: {} };
+var alertPrefs = { armed: false, vibrate: true, voice: true };
+try {
+  var savedAlertPrefs = JSON.parse(localStorage.getItem('notebook-rider-alerts'));
+  if (savedAlertPrefs) {
+    alertPrefs.vibrate = savedAlertPrefs.vibrate !== false;
+    alertPrefs.voice = savedAlertPrefs.voice !== false;
+  }
+} catch (_) { /* Local storage may be unavailable for a file preview. */ }
 
 /* ---------------- 工具 ---------------- */
 function money(n) {
@@ -208,18 +220,83 @@ function pushLog(o, title, desc) {
   if (!o.logs) o.logs = [];
   o.logs.push({ t: now(), title: title, desc: desc || '' });
 }
-function unreadMsg() { return state.deliver.msgs.filter(function (m) { return !m.read; }).length; }
-function updateMsgBadge() {
-  var b = document.getElementById('msgBadge');
-  if (b) { var n = unreadMsg(); b.textContent = n; b.style.display = n ? 'grid' : 'none'; }
+function orderByNo(no) { return state.orders.find(function (o) { return o.no === no; }); }
+function removeRiderTask(no) {
+  state.deliver.avail = state.deliver.avail.filter(function (t) { return t.no !== no; });
+  if (state.deliver.active && state.deliver.active.no === no) state.deliver.active = null;
 }
-function pushMsg(text, type) {
-  state.deliver.msgs.unshift({ t: now(), text: text, type: type || 'user', read: false });
-  if (state.deliver.msgs.length > 20) state.deliver.msgs.pop();
-  if (state.client === 'delivery') {
-    updateMsgBadge();
-    toast(text);
+function riderOwnsOrder(o) { return !!o && o.rider === '李海 · 0231'; }
+function orderCanBeUrged(o) { return !!o && ['备货中', '待取货', '配送中'].indexOf(o.status) >= 0; }
+function riderAlertOpen(o) { return riderOwnsOrder(o) && (o.status === '待取货' || o.status === '配送中'); }
+function riderMessages() {
+  return state.deliver.msgs.filter(function (m) {
+    var order = orderByNo(m.no);
+    return riderOwnsOrder(order) && (m.read || riderAlertOpen(order));
+  });
+}
+function unreadMsg() { return riderMessages().filter(function (m) { return !m.read; }).length; }
+function orderUrgency(no) {
+  return riderAlertOpen(orderByNo(no)) ? state.deliver.msgs.find(function (m) { return m.no === no; }) : null;
+}
+function urgencyHtml(alert) {
+  if (!alert) return '';
+  if (alert.read) return '<p class="urge-history">已催单 · 已知晓 <time>' + esc(alert.t) + '</time></p>';
+  return '<div class="urge-banner"><span class="urge-seal" aria-hidden="true">急</span>' +
+    '<div class="urge-copy"><strong>' + esc(alert.text) + '</strong><small>等待知晓 · <time>' + esc(alert.t) + '</time></small></div>' +
+    '<button class="urge-ack" data-act="ackUrge" data-val="' + esc(alert.no) + '">已知晓</button></div>';
+}
+function alertCapabilities() {
+  return { vibrate: typeof navigator !== 'undefined' && typeof navigator.vibrate === 'function',
+    voice: typeof window.speechSynthesis !== 'undefined' && typeof window.SpeechSynthesisUtterance === 'function' };
+}
+function playRiderAlert(text, test) {
+  var capabilities = alertCapabilities();
+  var vibration = false, voice = false;
+  if (alertPrefs.vibrate && capabilities.vibrate) {
+    try { vibration = navigator.vibrate([170, 100, 170]); } catch (_) { /* Keep the text alert. */ }
   }
+  if (alertPrefs.voice && capabilities.voice) {
+    try {
+      var prompt = new window.SpeechSynthesisUtterance(text);
+      prompt.lang = 'zh-CN';
+      prompt.onend = prompt.onerror = function (event) {
+        if (activeSpeech !== prompt) return;
+        activeSpeech = null;
+        if (test && event.type === 'error') toast('语音未播放，可查看系统声音设置');
+      };
+      stopRiderVoice();
+      activeSpeech = prompt;
+      window.speechSynthesis.speak(prompt);
+      voice = true;
+    } catch (_) { activeSpeech = null; }
+  }
+  return { vibration: vibration, voice: voice };
+}
+var activeSpeech = null;
+function stopRiderVoice() {
+  if (!activeSpeech) return;
+  activeSpeech = null;
+  try { window.speechSynthesis.cancel(); } catch (_) {}
+}
+function notifyNewUrges() {
+  if (state.client !== 'delivery' || document.hidden) return;
+  var pending = riderMessages().filter(function (m) { return !m.read && !m.presented; });
+  if (!pending.length) return;
+  pending.forEach(function (m) { m.presented = true; });
+  $('#alert-announcement').textContent = pending.length === 1 ? '收到催单：订单 ' + pending[0].no : '收到 ' + pending.length + ' 条催单';
+  if (alertPrefs.armed) playRiderAlert(pending.length === 1 ? '有一笔订单被催单，请查看任务。' : '有新的催单，请查看任务。');
+}
+function requestUrge(o, type) {
+  if (!orderCanBeUrged(o)) { toast('当前订单不能催单'); return; }
+  var ts = Date.now();
+  if (o.lastUrgeAt && ts - o.lastUrgeAt < 60000) { toast('已经催过了，1 分钟后可再次催单'); return; }
+  o.lastUrgeAt = ts;
+  var label = type === 'admin' ? '管理端催单' : '用户催单';
+  state.deliver.msgs.unshift({ no: o.no, t: now(), text: label, read: false, presented: false });
+  pushLog(o, label, riderAlertOpen(o) ? '提醒已发送到骑手端' : '接单后向负责骑手显示提醒');
+  if (state.client === 'admin') closeSheet();
+  render();
+  toast(riderAlertOpen(o) ? '已催单 · 提醒已发送' : '已记录催单 · 骑手接单后可见');
 }
 function logsHtml(o) {
   var logs = o.logs || [];
@@ -310,23 +387,30 @@ function render() {
   var fn = VIEWS[c] && VIEWS[c][r];
   var screen = $('#screen');
   screen.className = 'screen app-' + c;
+  $('.device').dataset.view = c;
   screen.innerHTML = fn ? fn() : '<div class="empty"><b>页面不存在</b></div>';
   var sc = $('.scroll', screen);
   if (sc) sc.scrollTop = 0;
   syncChrome();
+  notifyNewUrges();
   requestAnimationFrame(function () { screen.classList.add('enter'); });
 }
 function syncChrome() {
-  $$('#switcher .sw').forEach(function (b) { b.classList.toggle('on', b.dataset.client === state.client); });
+  $$('#switcher .sw').forEach(function (b) {
+    var selected = b.dataset.client === state.client;
+    b.classList.toggle('on', selected);
+    b.setAttribute('aria-pressed', String(selected));
+  });
   var hints = {
     user: '试试：搜索商品 → 加购 → 购物车结算 → 提交订单',
-    delivery: '试试：抢一单 → 推进取货 / 送达，收入会累加',
+    delivery: '当前任务 · 取货、配送与催单提醒',
     admin: '试试：新增商品 / 改库存 / 下架 → 订单详情看日志时间轴'
   };
   $('#hint').textContent = hints[state.client];
+  $('#role-title').textContent = {user:'校园采购清单', delivery:'骑手配送小票', admin:'站点经营手账'}[state.client];
   var tips = {
     user: ['搜索框输入「薯片」「冰饮」会实时过滤', '点商品卡进详情：选规格、改数量', '「+」加入购物袋，购物袋角标会变', '购物车里勾选、加减、删除，金额实时算', '结算页可换地址、选送达时间、选支付方式', '提交后生成订单，可在订单里取消 / 再来一单'],
-    delivery: ['顶部「接单中」可切换在线 / 离线', '待抢单点「接单」进入当前任务', '任务页按步骤推进：取货 → 送达', '送达后今日收入累加，可在收入页提现'],
+    delivery: ['「催单提醒设置」可开启并试播震动、语音', '到用户端的 A2381 订单催单，再切回配送端', '对应任务小票显示「急」，点「已知晓」收起'],
     admin: ['今日 / 本周切换，指标与图表同步变化', '订单可按状态筛选，点开看详情与时间轴', '详情里可派单（推到配送端）/ 退款', '商品页可新增、编辑、改库存、上下架', '骑手页可切换上线状态']
   };
   $('#tips').innerHTML = tips[state.client].map(function (t) { return '<li>' + t + '</li>'; }).join('');
@@ -374,6 +458,8 @@ function back() {
   render();
 }
 function switchClient(c) {
+  closeSheet();
+  if (c !== 'delivery') stopRiderVoice();
   state.client = c;
   if (history && history.replaceState) history.replaceState(null, '', '#' + c);
   render();
@@ -383,13 +469,17 @@ function switchClient(c) {
 var ACTIONS = {};
 
 ACTIONS.reset = function () {
+  stopRiderVoice();
   state.search = ''; state.cat = '全部';
   state.cart = [{ id: 'p3', qty: 1, checked: true }];
   state.orders = seedOrders();
   state.orderTab = '全部'; state.detailNo = null; state.lastNo = null;
-  state.deliver.active = null; state.deliver.online = true; state.deliver.done = 12; state.deliver.income = 86.4;
+  state.deliver.active = seedActiveTask(); state.deliver.online = true; state.deliver.done = 12; state.deliver.income = 86.4;
   state.deliver.last = Date.now(); state.deliver.tick = 0; state.deliver.poolIdx = 0;
-  state.deliver.msgs = [{ t: '20:12', text: '订单 A2381，管理员提醒你尽快配送', type: 'admin', read: false }];
+  state.deliver.msgs = [];
+  state.deliver.records = [
+    { t: '19:52', no: 'A2376', fee: 7.5 }, { t: '19:10', no: 'A2371', fee: 6 }, { t: '18:44', no: 'A2368', fee: 8.5 }
+  ];
   state.deliver.avail = [
     { id: 'T1', no: 'A2384', addr: '学苑 6 号楼 · 302', km: '0.8 km', items: 4, fee: 7.5, min: 12, tag: '刚下单' },
     { id: 'T2', no: 'A2383', addr: '图书馆东门 · 自提柜', km: '1.3 km', items: 2, fee: 6.0, min: 2, tag: '2 分钟前' },
@@ -541,6 +631,7 @@ ACTIONS.doCancel = function (no) {
   state.orders.forEach(function (o) {
     if (o.no === no) {
       o.status = '已取消';
+      removeRiderTask(no);
       pushLog(o, '已取消', o.pay === '货到付款' ? '用户取消，订单关闭' : '用户取消，退款原路退回');
     }
   });
@@ -562,13 +653,7 @@ ACTIONS.reorder = function (no) {
 };
 ACTIONS.contact = function () { toast('演示版：正在呼叫骑手 0231'); };
 ACTIONS.urge = function (no) {
-  var o = state.orders.filter(function (x) { return x.no === no; })[0];
-  if (!o) return;
-  if (o.status === '已完成' || o.status === '已取消' || o.status === '已退款') { toast('这一单已经结束了'); return; }
-  pushLog(o, '用户催单', '用户点击催单，已通知骑手');
-  pushMsg('订单 ' + no + '，发起催单', 'user');
-  toast('已催单 · 配送端收到提醒');
-  render();
+  requestUrge(orderByNo(no), 'user');
 };
 
 var TASK_POOL = [
@@ -619,7 +704,7 @@ ACTIONS.dOrder = function (no) {
     return '<div class="co-line"><span>' + p.name + ' × ' + it.qty + '</span><b>' + money(unit * it.qty) + '</b></div>';
   }).join('');
   openSheet('<h3>' + o.no + '</h3><p class="sub">' + o.created + ' · ' + o.addr + ' · ' + pill(o.status) + '</p>' +
-    items +
+    urgencyHtml(orderUrgency(no)) + items +
     '<div class="co-line"><span>收货人</span><b>' + o.contact + ' · ' + maskPhone(o.phone) + '</b></div>' +
     '<div class="co-line"><span>支付方式</span><b>' + o.pay + '</b></div>' +
     '<div class="co-line total"><span>合计</span><b>' + money(orderTotal(o)) + '</b></div>' +
@@ -674,20 +759,69 @@ ACTIONS.dOrderStep = function (v) {
 ACTIONS.aListRange = function (r) { state.admin.listRange = r; render(); };
 
 ACTIONS.dMsg = function () {
-  var msgs = state.deliver.msgs;
+  var msgs = riderMessages();
   var list = msgs.map(function (m) {
     return '<div class="msg ' + (m.read ? '' : 'unread') + '"><span class="mdot"></span>' +
-      '<div><b>' + m.text + '</b><small>' + m.t + ' · ' + (m.type === 'admin' ? '管理端提醒' : '用户催单') + '</small></div></div>';
+      '<div><b>' + m.text + ' · ' + esc(m.no) + '</b><small>' + m.t + ' · ' + (m.read ? '已知晓' : '未读') + '</small></div>' +
+      (!m.read ? '<button class="btn sm ghost" data-act="viewUrgentOrder" data-val="' + esc(m.no) + '">查看</button>' : '') + '</div>';
   }).join('');
   openSheet('<h3>消息提醒</h3><p class="sub">' + unreadMsg() + ' 条未读 · 用户催单与管理端提醒都在这里</p>' +
     (list || '<p class="small muted">暂时没有新消息</p>') +
     '<button class="btn block" style="margin-top:14px" data-act="markRead">全部标为已读</button>');
 };
 ACTIONS.markRead = function () {
-  state.deliver.msgs.forEach(function (m) { m.read = true; });
+  riderMessages().forEach(function (m) { m.read = true; });
+  stopRiderVoice();
   closeSheet();
   render();
   toast('消息已全部标为已读');
+};
+ACTIONS.viewUrgentOrder = function (no) {
+  closeSheet();
+  if (state.deliver.active && state.deliver.active.no === no) go('task');
+  else ACTIONS.dOrder(no);
+};
+ACTIONS.ackUrge = function (no) {
+  if (!orderUrgency(no)) return;
+  state.deliver.msgs.forEach(function (m) { if (m.no === no) m.read = true; });
+  stopRiderVoice();
+  if ($('#sheet').classList.contains('on')) ACTIONS.dOrder(no);
+  render();
+  toast('已知晓催单');
+};
+ACTIONS.alertSettings = function () {
+  var supported = alertCapabilities();
+  var switches = [['vibrate', '震动提示'], ['voice', '语音提示']].map(function (entry) {
+    var key = entry[0];
+    var enabled = alertPrefs[key] && supported[key];
+    return '<button class="alert-setting" role="switch" aria-checked="' + enabled + '" data-act="alertToggle" data-val="' + key + '"' +
+      (supported[key] ? '' : ' disabled') + '><b>' + entry[1] + '</b><span>' + (supported[key] ? (enabled ? '开启' : '关闭') : '此设备不支持') + '</span></button>';
+  }).join('');
+  openSheet('<h3>催单提醒</h3><p class="sub">骑手页面在前台时生效，文字提醒始终开启。</p>' + switches +
+    '<button class="btn primary block alert-test" data-act="alertTest"' +
+    (supported.voice || supported.vibrate ? '' : ' disabled') + '>' + (alertPrefs.armed ? '再次试播' : '开启并试播') + '</button>');
+};
+ACTIONS.alertToggle = function (key) {
+  if ((key !== 'voice' && key !== 'vibrate') || !alertCapabilities()[key]) return;
+  alertPrefs[key] = !alertPrefs[key];
+  if (!alertPrefs.voice) stopRiderVoice();
+  if (key === 'vibrate' && !alertPrefs.vibrate) {
+    try { navigator.vibrate(0); } catch (_) {}
+  }
+  try { localStorage.setItem('notebook-rider-alerts', JSON.stringify({ voice: alertPrefs.voice, vibrate: alertPrefs.vibrate })); } catch (_) {}
+  ACTIONS.alertSettings();
+  var button = $(`[data-act="alertToggle"][data-val="${key}"]`, $('#sheet'));
+  if (button) button.focus();
+};
+ACTIONS.alertTest = function () {
+  if (state.client !== 'delivery' || document.hidden) return;
+  alertPrefs.armed = true;
+  var result = playRiderAlert('催单提醒已开启。', true);
+  render();
+  ACTIONS.alertSettings();
+  var button = $('[data-act="alertTest"]', $('#sheet'));
+  if (button) button.focus();
+  toast(result.vibration || result.voice ? '已发起试播' : '当前仅显示文字提醒');
 };
 
 ACTIONS.dOnline = function () {
@@ -701,7 +835,7 @@ ACTIONS.accept = function (id) {
   var t = state.deliver.avail.filter(function (x) { return x.id === id; })[0];
   if (!t) return;
   state.deliver.avail = state.deliver.avail.filter(function (x) { return x.id !== id; });
-  state.deliver.active = { no: t.no, addr: t.addr, km: t.km, items: t.items, fee: t.fee, stage: 0, at: '刚刚' };
+  state.deliver.active = { no: t.no, addr: t.addr, km: t.km, items: t.items, fee: t.fee, stage: 0, at: now() };
   var order = state.orders.filter(function (o) { return o.no === t.no; })[0];
   if (!order) {
     order = {
@@ -730,6 +864,7 @@ ACTIONS.dStep = function () {
     return;
   }
   if (a.stage === 1) {
+    stopRiderVoice();
     a.stage = 2;
     state.deliver.done += 1;
     state.deliver.income += a.fee;
@@ -776,20 +911,21 @@ ACTIONS.aAct = function (v) {
   var o = state.orders.filter(function (x) { return x.no === no; })[0];
   if (!o) return;
   if (act === 'dispatch') {
+    if (o.status !== '备货中') { toast('仅备货中的订单可派单'); return; }
     o.status = '待取货';
-    if (!state.deliver.active && !state.deliver.avail.some(function (x) { return x.no === no; })) {
+    if (!state.deliver.avail.some(function (x) { return x.no === no; })) {
       state.deliver.avail.unshift({ id: 'T' + Date.now(), no: no, addr: o.addr, km: '1.1 km', items: o.items.reduce(function (a, i) { return a + i.qty; }, 0), fee: 7.0, min: 0, tag: '刚派单' });
     }
     pushLog(o, '已派单', '北苑仓已派单，等待骑手接单');
     toast('已派单，配送端可见');
   } else if (act === 'refund') {
     o.status = '已退款';
+    removeRiderTask(no);
     pushLog(o, '已退款', '管理员发起退款 ' + money(orderTotal(o)));
     toast('已退款 ' + money(orderTotal(o)));
   } else if (act === 'remind') {
-    pushLog(o, '管理员催单', '管理员提醒骑手尽快配送');
-    pushMsg('订单 ' + no + '，管理员提醒你尽快配送', 'admin');
-    toast('已催单，配送端收到提醒');
+    requestUrge(o, 'admin');
+    return;
   }
   closeSheet();
   render();
@@ -1026,9 +1162,13 @@ ACTIONS.aRider = function (i) {
 var INPUTS = {};
 INPUTS.search = function (v) {
   state.search = v;
-  var list = filtered(v, state.cat);
+  var list = filtered(v, '全部');
   paint('goodsGrid', list.length ? tiles(list) : '');
   paint('secTitle', (v.trim() ? '搜索「' + esc(v.trim()) + '」' : '常买清单') + '<small>共 ' + list.length + ' 件</small>');
+  var empty = document.getElementById('homeEmpty');
+  if (empty) empty.hidden = !!list.length;
+  var promos = document.getElementById('homePromos');
+  if (promos) promos.hidden = !!v.trim();
 };
 INPUTS.note = function (v) { state.checkout.note = v; };
 INPUTS.dorder = function (v) {
@@ -1082,10 +1222,13 @@ $('#veil').addEventListener('click', closeSheet);
 
 var initial = (location.hash || '').replace('#', '');
 if (['user', 'delivery', 'admin'].indexOf(initial) >= 0) state.client = initial;
-render();
 window.addEventListener('hashchange', function () {
   var h = (location.hash || '').replace('#', '');
-  if (['user', 'delivery', 'admin'].indexOf(h) >= 0 && h !== state.client) { state.client = h; render(); }
+  if (['user', 'delivery', 'admin'].indexOf(h) >= 0 && h !== state.client) switchClient(h);
+});
+document.addEventListener('visibilitychange', function () {
+  if (document.hidden) stopRiderVoice();
+  else notifyNewUrges();
 });
 
 /* 配送端大厅：10 秒静默刷新 */

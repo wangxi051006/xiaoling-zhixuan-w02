@@ -1,7 +1,7 @@
 import { createApp, h, ref, onMounted, watch } from 'vue';
 import { assertNoProductionMock } from '../shared/api.ts';
 import type { AdminOrder, AdminOrderList, Dashboard, AdminProduct, AdminProductList, ProductInput, ProductUpdate, SKUInput, SKU, InventoryAdjustment, Promotion, PromotionUpdate, AdminSlot, AdminSlotList, SlotBatch, SlotUpdate, Rider, RiderList, RiderUpdate, CODReceipt, CODReceiptList, CODBatch, CODBatchInput, CODVerify, Refund, RefundList, RestockInput, ReturnInspect, Reason, PayoutInput, RiderProvision } from '../shared/generated.ts';
-import { session, sessionKey, shell, money, date, today, id, btn, field, select, check, card, empty, badge, form, stateText } from '../user/ui.ts';
+import { session, localTestLogin, sessionKey, shell, money, date, today, id, btn, field, select, check, card, empty, badge, form, stateText } from '../user/ui.ts';
 // difference_fen is the stored ledger direction (expected - actual); the label is
 // shared with the tests so the page can never subtract the two sides itself.
 import { codDifference } from '../shared/cod.ts';
@@ -17,6 +17,7 @@ export const AdminApp={setup(){
  const capacities=ref<Record<string,number>>({}),accepting=ref<Record<string,boolean>>({}),makers=new Map<string,string>();
  const provisionIssuer=ref(''),provisionSubject=ref(''),provisionName=ref('');
  const s=session(['OPERATOR','FINANCE','SECURITY_ADMIN'],refresh);
+ const testLogin=localTestLogin('admin',s);
  watch(()=>sessionKey(s.me.value),(value,prior)=>{if(value!==prior){dashboard.value=undefined;orders.value=[];order.value=undefined;products.value=[];editing.value=undefined;slots.value=[];riders.value=[];receipts.value=[];refunds.value=[];batch.value=undefined;batchId.value='';receiptSelection.value=[];batchRider.value='';actualFen.value=0;reason.value='OPERATOR_REQUEST';reference.value='';stock.value=[];orderQuery.value='';filter.value='ALL';productForm.value={name:'',description:'',skus:[{label:'单件',units_per_pack:1,unit_price_fen:0}],on_sale:false,reorder_point:0};promoStart.value='';promoEnd.value='';promoTiers.value=[{min_qty:1,discount_bps:0}];inventoryDelta.value=0;capacities.value={};accepting.value={};makers.clear();}},{flush:'sync'});
  const operator=()=>!!s.me.value?.roles.includes('OPERATOR'),finance=()=>!!s.me.value?.roles.includes('FINANCE'),security=()=>!!s.me.value?.roles.includes('SECURITY_ADMIN');
  const business=()=>operator()||finance();
@@ -79,7 +80,7 @@ export const AdminApp={setup(){
  function dashboardView(){const d=dashboard.value;return h('div',[h('div',{class:'note'},[h('h2','今天的站点手账'),h('p','订单、送达和实际净收款均来自服务器。'),field('看板日期',day.value,v=>{day.value=v;void s.run(refresh);},'date')]),d?h('div',{class:'metrics'},[['订单',String(d.order_count)],['已送达',String(d.delivered_count)],['净实收',money(d.net_collected_fen)],['逾期',String(d.overdue_count)]].map(([label,value])=>h('div',{class:'metric'},[h('span',label),h('b',value)]))):empty('等待经营数据'),card('对账与异常处理',[h('p','通过服务器经营看板、COD 实收凭证、上缴复点和退款结果逐笔核对。净实收不等于商品销售预测。'),h('div',{class:'actions'},[operator()?btn('查看订单履约',()=>go('订单履约')):null,finance()?btn('查看 COD 凭证与复点',()=>go('COD 财务')):null,btn('查看退款进度',()=>go('退款')),btn('导出完整账本对账',()=>{},true)]),h('p',{class:'muted'},'冻结契约没有独立账本对账、差异明细及导出接口，完整账本对账暂不可用。')])]);}
  onMounted(s.recover);
  return ()=>{const tabs=[...(business()?['经营看板']:[]),...(operator()?['订单履约','商品与库存','服务时段']:[]),...(operator()||security()?['骑手管理']:[]),...(finance()?['COD 财务']:[]),...(business()?['退款']:[])];return shell('admin','站点经营手账',h('div',{class:'actions'},tabs.map(t=>btn(t,()=>go(t),s.busy.value,undefined,tab.value===t?'active':''))),[
- !s.me.value?card('员工登录与权限',[h('p','请使用当前管理入口的员工登录。菜单由服务器 /me 的运营与财务角色决定；敏感动作需要近期 MFA。'),h('a',{href:'/api/v1/auth/staff/start'},'前往员工登录 / MFA')]):h('div',[
+ testLogin(),!s.me.value?card('员工登录与权限',[h('p','请使用当前管理入口的员工登录。菜单由服务器 /me 的运营与财务角色决定；敏感动作需要近期 MFA。'),h('a',{href:'/api/v1/auth/staff/start'},'前往员工登录 / MFA')]):h('div',[
  h('div',{class:'actions'},[btn('刷新服务器数据',()=>s.run(refresh),s.busy.value,'refresh-admin')]),
  tab.value==='经营看板'&&business()?dashboardView():tab.value==='订单履约'&&operator()?ordersView():tab.value==='商品与库存'&&operator()?productsView():tab.value==='服务时段'&&operator()?slotsView():tab.value==='骑手管理'&&(operator()||security())?riderView():tab.value==='COD 财务'&&finance()?financeView():tab.value==='退款'&&business()?refundView():empty('当前角色没有此页面权限')
  ])],s.tools(),s.status());};
