@@ -1,0 +1,8 @@
+<view wx:if="{{!url}}" class="unavailable">
+  <text>商城地址尚未配置</text>
+</view>
+<web-view wx:elif="{{!failed}}" src="{{url}}" binderror="showError" />
+<view wx:else class="unavailable">
+  <text>商城暂时无法打开</text>
+  <button bindtap="retry">重新加载</button>
+</view>

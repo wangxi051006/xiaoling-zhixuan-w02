@@ -73,7 +73,7 @@ type staffStart struct {
 }
 
 func (s *StaffOIDC) oauth(entry Entry) (oauth2.Config, error) {
-	if entry != RiderEntry && entry != AdminEntry {
+	if entry != RiderEntry && entry != AdminEntry && entry != MerchantEntry {
 		return oauth2.Config{}, ErrStaffLogin
 	}
 	origin, ok := s.policy.origins[entry]

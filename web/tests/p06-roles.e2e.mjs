@@ -9,6 +9,7 @@ const me = role => ({ id: `${role}-actor`, station_id:'station', roles:[{user:'C
 const slot = {id:'slot-1',starts_at:'2026-11-19T20:00:00+08:00',ends_at:'2026-11-19T20:30:00+08:00',dispatch_at:'2026-11-19T19:50:00+08:00',accepting:true};
 const product = {id:'p1',name:'测试饮品',description:'真实接口商品描述',skus:[{id:'sku-1',label:'单件',units_per_pack:1,unit_price_fen:350}]};
 const order = {id:'order-1',delivery_mode:'ASAP',slot,status:'PREPARING',stock_status:'UNSORTED',settlement_status:'COD_UNCOLLECTED',payment_method:'COD',total_fen:350,lines:[{sku_id:'sku-1',qty:1,name:product.name,spec:'单件',unit_price_fen:350,line_total_fen:350}],created_at:'2026-11-19T19:00:00+08:00'};
+const paidOrder = {...order, payment_method:'BALANCE', settlement_status:'BALANCE_PAID'};
 for (const role of ['user','rider','admin']) test(`MOCK ${role}: accessible entry and contract actions`, async () => {
   assert.equal(existsSync(`src/${role}/entry.ts`), true, `${role} must provide mountable entry`);
   const vite = await createVite({configFile:false,server:{middlewareMode:true,hmr:false,ws:false},appType:'custom'});
@@ -29,15 +30,17 @@ for (const role of ['user','rider','admin']) test(`MOCK ${role}: accessible entr
       else if(path==='/catalog/products/p1')value=product;
       else if(path==='/me/addresses'){if(delayAddress)await new Promise(resolve=>releaseAddress=resolve);value={items:[{id:'address-1',building_id:'b1',building_name:'一号楼',room:'101',contact_name:'合成人',contact_phone:'13800000000',version:1}],next_cursor:null};}
       else if(path==='/delivery/slots')value={items:[slot],next_cursor:null};
-      else if(path==='/payment-methods')value={methods:[{code:'COD',enabled:true,label:'货到付款'},{code:'BALANCE',enabled:false,label:'余额'},{code:'WECHAT',enabled:false,label:'微信待接入'}]};
-      else if(path==='/me/wallet')value={balance_fen:0,currency:'CNY'};
-      else if(path==='/checkout/quote')value={quote_id:'quote-1',valid_until:'2099-01-01T00:00:00Z',slot_id:slot.id,lines:order.lines,total_fen:350,payment_method:'COD'};
-      else if(path==='/orders'&&req.method()==='POST'){created=true;value=order;}
-      else if(path==='/orders')value={items:created?[order]:[],next_cursor:null};
-      else if(path==='/orders/order-1')value=order;
+      else if(path==='/payment-methods')value={methods:[{code:'COD',enabled:true,label:'货到付款'},{code:'BALANCE',enabled:true,label:'余额'},{code:'WECHAT',enabled:false,label:'微信待接入'}]};
+      else if(path==='/me/wallet')value={balance_fen:1000,currency:'CNY'};
+      else if(path==='/checkout/quote')value={quote_id:'quote-1',valid_until:'2099-01-01T00:00:00Z',slot_id:slot.id,lines:order.lines,total_fen:350,payment_method:'BALANCE'};
+      else if(path==='/orders'&&req.method()==='POST'){created=true;value=paidOrder;}
+      else if(path==='/orders')value={items:created?[paidOrder]:[],next_cursor:null};
+      else if(path==='/orders/order-1')value=paidOrder;
       else if(path==='/rider/tasks')value={items:taskStage==='DELIVERED'?[]:[{id:'task-1',building_name:'一号楼',item_count:1,fee_fen:100,slot,order_status:taskStage,payment_method:'COD'}],next_cursor:null};
       else if(path.startsWith('/rider/tasks/task-1')){if(path.endsWith('/claim'))taskStage='AWAITING_PICKUP';if(path.endsWith('/pickup'))taskStage='IN_DELIVERY';if(path.endsWith('/deliver'))taskStage='DELIVERED';value={id:'task-1',building_name:'一号楼',item_count:1,fee_fen:100,slot,order_status:taskStage,payment_method:'COD',...(taskStage==='IN_DELIVERY'?{cod_due_fen:500}:{}),address:{building_name:'一号楼',building_id:'b1',room:'101',contact_name:'合成人',contact_phone:'13800000000'}};}
       else if(path==='/rider/capacity')value={active:0,limit:8,remaining:8};
+      else if(path==='/rider/availability')value={available:true};
+      else if(path==='/rider/leaderboard')value={local_date:'2026-11-19',entries:[]};
       else if(path==='/admin/order-limits')value={merchant_batch_limit:15,rider_active_limit:8,version:1};
       else if(path==='/rider/availability')value={available:true};
       else if(path==='/admin/dashboard')value={local_date:'2026-11-19',order_count:1,delivered_count:0,net_collected_fen:0,overdue_count:0};
@@ -50,17 +53,19 @@ for (const role of ['user','rider','admin']) test(`MOCK ${role}: accessible entr
     await page.getByTestId('session-ready').waitFor();
     assert.equal(await page.getByRole('heading',{level:1}).count(),1);
     if(role==='user'){
-      await page.getByTestId('add-sku-1').click();await page.getByRole('button',{name:/^购物袋/}).click();
+      await page.getByTestId('add-sku-1').click();await page.getByTestId('start-checkout').click();
       assert.equal(await page.getByLabel('微信待接入').isDisabled(),true);
       await page.getByTestId('quote').click();await page.getByTestId('confirm-order').click();
-      await page.getByText('送达后付款',{exact:true}).waitFor();
+      await page.getByTestId('order-detail').locator('p').getByText('余额已扣',{exact:true}).waitFor();
       const saved=await page.evaluate(()=>JSON.parse(localStorage.getItem('xiaoling.cart')||'[]'));
       for(const line of saved)assert.deepEqual(Object.keys(line).sort(),['qty','sku_id']);
       await page.getByRole('status').filter({hasText:'服务器已确认订单'}).waitFor();delayAddress=true;
       const requested=page.waitForRequest(r=>r.url().includes('/me/addresses'));
       await page.getByTestId('recover-session').click();await requested;
       await page.getByRole('button',{name:'退出登录',exact:true}).click();
-      releaseAddress();await page.getByRole('button',{name:/^购物袋/}).click();
+      releaseAddress();
+      await page.getByRole('button',{name:'商品',exact:true}).click();
+      await page.getByTestId('add-sku-1').click();await page.getByTestId('start-checkout').click();
       await page.getByTestId('auth-modes').waitFor();
       assert.equal(await page.getByTestId('session-ready').count(),0);
       assert.equal((await page.getByLabel('配送地址',{exact:true}).locator('option').allTextContents()).some(t=>t.includes('101')),false,'logout must clear address data and discard late responses');

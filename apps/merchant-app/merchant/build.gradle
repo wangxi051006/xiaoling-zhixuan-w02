@@ -1,0 +1,8 @@
+plugins {
+    id 'com.android.application'
+}
+
+ext.clientId = 'cn.xiaoling.merchant'
+ext.clientName = '校零智选商家'
+ext.originVariable = 'MERCHANT_ORIGIN'
+apply from: rootProject.file('client.gradle')

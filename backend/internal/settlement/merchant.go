@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"campus.local/xiaoling/internal/identity"
+	"campus.local/xiaoling/internal/platform"
 	"github.com/jackc/pgx/v5"
 )
 
@@ -49,15 +50,26 @@ func (h *HTTP) merchantSettlements(w http.ResponseWriter, r *http.Request, actor
 		writeSettlementError(w, r, err)
 		return
 	}
-	rows, err := h.Pool.Query(r.Context(), merchantSettlementSelect+`
-		AND c.order_id>$2 AND ($3='' OR (c.collected_at AT TIME ZONE 'Asia/Shanghai')::date=NULLIF($3,'')::date)
-		ORDER BY c.order_id LIMIT $4`, actor.StationID, p.cursor, p.date, p.limit+1)
-	if err != nil {
-		writeSettlementError(w, r, err)
-		return
-	}
-	items, err := pgx.CollectRows(rows, func(row pgx.CollectableRow) (merchantSettlement, error) {
-		return scanMerchantSettlement(row)
+	var items []merchantSettlement
+	err = platform.InTransaction(r.Context(), h.Pool, func(tx pgx.Tx) error {
+		merchant := ""
+		if actor.Entry == identity.MerchantEntry {
+			var err error
+			merchant, err = identity.MerchantID(r.Context(), tx, actor)
+			if err != nil {
+				return err
+			}
+		}
+		rows, err := tx.Query(r.Context(), merchantSettlementSelect+`
+			AND c.order_id>$2 AND ($3='' OR (c.collected_at AT TIME ZONE 'Asia/Shanghai')::date=NULLIF($3,'')::date)
+			AND ($5='' OR o.merchant_id=$5) ORDER BY c.order_id LIMIT $4`, actor.StationID, p.cursor, p.date, p.limit+1, merchant)
+		if err != nil {
+			return err
+		}
+		items, err = pgx.CollectRows(rows, func(row pgx.CollectableRow) (merchantSettlement, error) {
+			return scanMerchantSettlement(row)
+		})
+		return err
 	})
 	if err != nil {
 		writeSettlementError(w, r, err)

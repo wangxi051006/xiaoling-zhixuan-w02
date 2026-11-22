@@ -5,6 +5,7 @@ import (
 	"errors"
 	"math"
 
+	"campus.local/xiaoling/internal/identity"
 	"github.com/jackc/pgx/v5"
 )
 
@@ -22,6 +23,10 @@ type orderLimitsUpdate struct {
 	MerchantBatch   int   `json:"merchant_batch_limit"`
 	RiderActive     int   `json:"rider_active_limit"`
 	ExpectedVersion int64 `json:"expected_version"`
+}
+
+type availability struct {
+	Available bool `json:"available"`
 }
 
 func readOrderLimits(ctx context.Context, tx pgx.Tx, station string, lock bool) (limits orderLimits, err error) {
@@ -69,4 +74,17 @@ func readRiderCapacity(ctx context.Context, tx pgx.Tx, station, rider string) (c
 		capacity.Remaining = max(0, capacity.Limit-capacity.Active)
 	}
 	return capacity, err
+}
+
+// readAvailability exposes the same column the PUT handler writes, so the
+// rider screen shows a server-confirmed state instead of guessing.
+func readAvailability(ctx context.Context, port RiderStatePort, tx pgx.Tx, actor identity.Session) (availability, error) {
+	if port == nil {
+		return availability{}, ErrNotReady
+	}
+	available, err := port.RiderAvailability(ctx, tx, actor.AccountID, actor.StationID)
+	if err != nil {
+		return availability{}, err
+	}
+	return availability{Available: available}, nil
 }

@@ -1,13 +1,17 @@
 /web/node_modules/
 /web/dist/
+/web/dist-merchant/
+/apps/user-miniprogram/dist/
+/apps/*-app/.gradle/
+/apps/*-app/**/build/
+/apps/*-app/local.properties
+*.jks
+*.keystore
 /backend/product-images/
 /product-images/
 /.dsh-resume/
+/.dev-stack/
 /evidence/
-/docs/evidence/launch/*
-!/docs/evidence/launch/W02-freeze-controller-2026-11-19/
-/docs/evidence/launch/W02-freeze-controller-2026-11-19/*
-!/docs/evidence/launch/W02-freeze-controller-2026-11-19/source-files.json
 
 .env
 .env.*

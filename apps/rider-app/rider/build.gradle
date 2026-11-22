@@ -1,0 +1,8 @@
+plugins {
+    id 'com.android.application'
+}
+
+ext.clientId = 'cn.xiaoling.rider'
+ext.clientName = '校零智选骑手'
+ext.originVariable = 'RIDER_ORIGIN'
+apply from: rootProject.file('client.gradle')

@@ -1,6 +1,6 @@
 {
 	admin off
-	auto_https disable_redirects
+	auto_https off
 	http_port {$HTTP_PORT:80}
 	https_port {$HTTPS_PORT:443}
 	default_bind {$EDGE_BIND:0.0.0.0}
@@ -111,6 +111,13 @@
 			# The per-entry artifact contains only its manifest dependency closure.
 			file_server
 		}
+		@android_links {
+			expression `"{args[1]}" in ["merchant", "rider"]`
+			path /.well-known/assetlinks.json
+		}
+		handle @android_links {
+			file_server
+		}
 		respond "Not found" 404
 	}
 }
@@ -123,6 +130,9 @@ https://{$RIDER_HOST} {
 }
 https://{$ADMIN_HOST} {
 	import entry {$ADMIN_HOST} admin
+}
+https://{$MERCHANT_HOST:merchant.invalid} {
+	import entry {$MERCHANT_HOST:merchant.invalid} merchant
 }
 
 # No wildcard file serving, HTTPS-to-HTTP redirects or diagnostic proxying.

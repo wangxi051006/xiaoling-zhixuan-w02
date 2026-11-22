@@ -121,7 +121,7 @@ func setup(t *testing.T) *fixture {
 	riderState, _ := any(directory).(fulfillment.RiderStatePort)
 	policy := settlement.PaymentPolicy{CODEnabled: true, BalanceEnabled: true}
 	f.service = &fulfillment.Service{Pool: p, Clock: f.clock, Identity: directory, Catalog: c, Schedule: schedule.Store{}, Settlement: settlement.Store{Policy: policy}, RiderState: riderState, AlertSink: &recordingAlertSink{}, Policy: policy, AcceptNewOrders: true, AllowDispatch: true}
-	f.h, err = bootstrap.NewApplication(bootstrap.ApplicationOptions{Pool: p, Clock: f.clock, UserOrigin: "https://user.synthetic.test", RiderOrigin: "https://rider.synthetic.test", AdminOrigin: "https://admin.synthetic.test", Payments: policy, Orders: f.service})
+	f.h, err = bootstrap.NewApplication(bootstrap.ApplicationOptions{Pool: p, Clock: f.clock, UserOrigin: "https://user.synthetic.test", RiderOrigin: "https://rider.synthetic.test", AdminOrigin: "https://admin.synthetic.test", MerchantOrigin: "https://merchant.synthetic.test", Payments: policy, Orders: f.service})
 	if err != nil {
 		t.Fatal(err)
 	}

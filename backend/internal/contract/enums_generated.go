@@ -10,6 +10,7 @@ const (
 	RoleOperator Role = "OPERATOR"
 	RoleFinance Role = "FINANCE"
 	RoleSecurityAdmin Role = "SECURITY_ADMIN"
+	RoleMerchant Role = "MERCHANT"
 )
 
 type DeliveryMode string
@@ -74,6 +75,7 @@ type ErrorCode string
 
 const (
 	ErrorCodeQuoteChanged ErrorCode = "QUOTE_CHANGED"
+	ErrorCodeMixedMerchants ErrorCode = "MIXED_MERCHANTS"
 	ErrorCodeSlotFull ErrorCode = "SLOT_FULL"
 	ErrorCodeSlotExpired ErrorCode = "SLOT_EXPIRED"
 	ErrorCodeOutOfStock ErrorCode = "OUT_OF_STOCK"
@@ -98,13 +100,13 @@ const (
 
 func ContractEnums() map[string][]string {
 	return map[string][]string{
-		"Role": {string(RoleCustomer), string(RoleRider), string(RoleOperator), string(RoleFinance), string(RoleSecurityAdmin)},
+		"Role": {string(RoleCustomer), string(RoleRider), string(RoleOperator), string(RoleFinance), string(RoleSecurityAdmin), string(RoleMerchant)},
 		"DeliveryMode": {string(DeliveryModeAsap), string(DeliveryModeScheduled)},
 		"PaymentMethod": {string(PaymentMethodCod), string(PaymentMethodBalance), string(PaymentMethodWechat)},
 		"OrderStatus": {string(OrderStatusScheduled), string(OrderStatusPreparing), string(OrderStatusReadyForClaim), string(OrderStatusAwaitingPickup), string(OrderStatusInDelivery), string(OrderStatusDelivered), string(OrderStatusCanceled), string(OrderStatusReturning), string(OrderStatusReturned)},
 		"StockStatus": {string(StockStatusUnsorted), string(StockStatusSorted), string(StockStatusRestockPending), string(StockStatusRestocked)},
 		"SettlementStatus": {string(SettlementStatusCodUncollected), string(SettlementStatusCodCollected), string(SettlementStatusBalancePaid), string(SettlementStatusVoid), string(SettlementStatusRefundPending), string(SettlementStatusRefunded)},
 		"RemittanceStatus": {string(RemittanceStatusNotRemitted), string(RemittanceStatusInBatch), string(RemittanceStatusVerified), string(RemittanceStatusDiscrepancy)},
-		"ErrorCode": {string(ErrorCodeQuoteChanged), string(ErrorCodeSlotFull), string(ErrorCodeSlotExpired), string(ErrorCodeOutOfStock), string(ErrorCodePaymentMethodDisabled), string(ErrorCodeInsufficientBalance), string(ErrorCodeCodActiveLimit), string(ErrorCodeIdempotencyConflict), string(ErrorCodeTaskAlreadyClaimed), string(ErrorCodeOrderLimitReached), string(ErrorCodeCodBatchDeliveryForbidden), string(ErrorCodeCodClaimExclusive), string(ErrorCodeInvalidState), string(ErrorCodeBadRequest), string(ErrorCodeUnauthenticated), string(ErrorCodeForbidden), string(ErrorCodeNotFound), string(ErrorCodeRateLimited), string(ErrorCodeBodyTooLarge), string(ErrorCodeInternalError), string(ErrorCodeNotReady)},
+		"ErrorCode": {string(ErrorCodeQuoteChanged), string(ErrorCodeMixedMerchants), string(ErrorCodeSlotFull), string(ErrorCodeSlotExpired), string(ErrorCodeOutOfStock), string(ErrorCodePaymentMethodDisabled), string(ErrorCodeInsufficientBalance), string(ErrorCodeCodActiveLimit), string(ErrorCodeIdempotencyConflict), string(ErrorCodeTaskAlreadyClaimed), string(ErrorCodeOrderLimitReached), string(ErrorCodeCodBatchDeliveryForbidden), string(ErrorCodeCodClaimExclusive), string(ErrorCodeInvalidState), string(ErrorCodeBadRequest), string(ErrorCodeUnauthenticated), string(ErrorCodeForbidden), string(ErrorCodeNotFound), string(ErrorCodeRateLimited), string(ErrorCodeBodyTooLarge), string(ErrorCodeInternalError), string(ErrorCodeNotReady)},
 	}
 }

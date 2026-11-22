@@ -34,6 +34,10 @@ func (h *HTTP) Register(mux *http.ServeMux) {
 	mux.HandleFunc("GET "+imageURLPrefix+"{id}", h.getProductImage)
 	mux.HandleFunc(ImageUploadPattern, h.operator(h.uploadProductImage))
 	mux.HandleFunc("GET /api/v1/admin/products", h.operator(h.listAdmin))
+	mux.HandleFunc("GET /api/v1/merchant/products", h.available(h.listMerchant))
+	mux.HandleFunc("POST /api/v1/merchant/products", h.merchant(h.createMerchant))
+	mux.HandleFunc("PATCH /api/v1/merchant/products/{id}", h.merchant(h.updateMerchant))
+	mux.HandleFunc("POST /api/v1/merchant/inventory/adjustments", h.merchant(h.adjustMerchant))
 	mux.HandleFunc("POST /api/v1/admin/products", h.operator(h.create))
 	mux.HandleFunc("PATCH /api/v1/admin/products/{id}", h.operator(h.update))
 	mux.HandleFunc("PUT /api/v1/admin/products/{id}/promotion", h.operator(h.promotion))
@@ -72,7 +76,7 @@ func catalogError(w http.ResponseWriter, r *http.Request, err error) {
 		status, code = 413, "BODY_TOO_LARGE"
 	case errors.Is(err, ErrInvalid):
 		status, code = 400, "BAD_REQUEST"
-	case errors.Is(err, ErrNotFound):
+	case errors.Is(err, ErrNotFound), errors.Is(err, identity.ErrObjectNotFound):
 		status, code = 404, "NOT_FOUND"
 	case errors.Is(err, ErrVersion):
 		status, code = 409, "INVALID_STATE"
@@ -137,6 +141,41 @@ func listQuery(raw string, public bool) (cursor, q, category string, limit int, 
 func (h *HTTP) listPublic(w http.ResponseWriter, r *http.Request) { h.list(w, r, "", true) }
 func (h *HTTP) listAdmin(w http.ResponseWriter, r *http.Request, s identity.Session) {
 	h.list(w, r, s.StationID, false)
+}
+
+func (h *HTTP) listMerchant(w http.ResponseWriter, r *http.Request) {
+	if h.Authorize == nil {
+		platform.WriteError(w, r, 503, "NOT_READY", "Service not ready")
+		return
+	}
+	actor, ok := h.Authorize(w, r, identity.MerchantEntry, false, contract.RoleMerchant)
+	if !ok {
+		return
+	}
+	cursor, _, _, limit, err := listQuery(r.URL.RawQuery, false)
+	if err != nil {
+		catalogError(w, r, err)
+		return
+	}
+	var items []AdminProduct
+	err = platform.InTransaction(r.Context(), h.Pool, func(tx pgx.Tx) error {
+		merchant, err := identity.MerchantID(r.Context(), tx, actor)
+		if err != nil {
+			return err
+		}
+		items, err = (Store{}).listProducts(r.Context(), tx, actor.StationID, cursor, "", "", limit+1, false, merchant)
+		return err
+	})
+	if err != nil {
+		catalogError(w, r, err)
+		return
+	}
+	var next *string
+	if len(items) > limit {
+		next = &items[limit-1].ID
+		items = items[:limit]
+	}
+	catalogJSON(w, 200, catalogPage[AdminProduct]{Items: items, Next: next})
 }
 
 func (h *HTTP) list(w http.ResponseWriter, r *http.Request, station string, public bool) {

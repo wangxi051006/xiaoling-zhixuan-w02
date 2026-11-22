@@ -36,6 +36,7 @@ type Product struct {
 	Name        string `json:"name"`
 	Description string `json:"description"`
 	ImageURL    string `json:"image_url,omitempty"`
+	Category    string `json:"category,omitempty"`
 	SKUs        []SKU  `json:"skus"`
 }
 
@@ -88,7 +89,7 @@ type reader interface {
 	QueryRow(context.Context, string, ...any) pgx.Row
 }
 
-const productSelect = `SELECT p.id,p.name,p.description,p.image_url,p.on_sale,p.version,
+const productSelect = `SELECT p.id,p.name,p.description,p.image_url,NULLIF(p.category,'uncategorized'),p.on_sale,p.version,
 	i.id,i.on_hand,i.reserved,i.reorder_point,i.version,
 	CASE WHEN p.promotion_id IS NOT NULL THEN jsonb_build_object('starts_at',p.promotion_starts_at,
 	'ends_at',p.promotion_ends_at,'tiers',p.promotion_tiers) END,
@@ -100,12 +101,16 @@ func scanProduct(row pgx.Row) (AdminProduct, error) {
 	var p AdminProduct
 	i := &p.Inventory
 	var promotion, skus []byte
-	err := row.Scan(&p.ID, &p.Name, &p.Description, &p.ImageURL, &p.OnSale, &p.Version, &i.ID, &i.OnHand, &i.Reserved, &i.ReorderPoint, &i.Version, &promotion, &skus)
+	var category *string
+	err := row.Scan(&p.ID, &p.Name, &p.Description, &p.ImageURL, &category, &p.OnSale, &p.Version, &i.ID, &i.OnHand, &i.Reserved, &i.ReorderPoint, &i.Version, &promotion, &skus)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return p, ErrNotFound
 	}
 	if err != nil {
 		return p, err
+	}
+	if category != nil {
+		p.Category = *category
 	}
 	if err := json.Unmarshal(skus, &p.SKUs); err != nil {
 		return p, err
@@ -116,11 +121,21 @@ func scanProduct(row pgx.Row) (AdminProduct, error) {
 	return p, err
 }
 
-func (Store) ListProducts(ctx context.Context, db reader, station, cursor, query, category string, limit int, public bool) ([]AdminProduct, error) {
-	rows, err := db.Query(ctx, productSelect+` WHERE (p.station_id=$1 OR ($5::boolean AND $1='')) AND p.id COLLATE "C">$2
+func (s Store) ListProducts(ctx context.Context, db reader, station, cursor, query, category string, limit int, public bool) ([]AdminProduct, error) {
+	return s.listProducts(ctx, db, station, cursor, query, category, limit, public, "")
+}
+
+func (Store) listProducts(ctx context.Context, db reader, station, cursor, query, category string, limit int, public bool, merchant string) ([]AdminProduct, error) {
+	statement := productSelect + ` WHERE (p.station_id=$1 OR ($5::boolean AND $1='')) AND p.id COLLATE "C">$2
 	AND (NOT $5::boolean OR p.on_sale)
 	AND ($3='' OR strpos(lower(p.name),lower($3))>0 OR strpos(lower(p.description),lower($3))>0)
-	AND ($6='' OR p.category=$6) ORDER BY p.id COLLATE "C" LIMIT $4`, station, cursor, query, limit, public, category)
+	AND ($6='' OR p.category=$6)`
+	args := []any{station, cursor, query, limit, public, category}
+	if merchant != "" {
+		statement += " AND p.merchant_id=$7"
+		args = append(args, merchant)
+	}
+	rows, err := db.Query(ctx, statement+` ORDER BY p.id COLLATE "C" LIMIT $4`, args...)
 	if err != nil {
 		return nil, err
 	}

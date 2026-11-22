@@ -33,10 +33,10 @@ export function schemas() {
     AddressInput: obj(address), AddressUpdate: obj({ ...address, expected_version: version }, Object.keys(address)), Address: obj({ id, ...address, building_name: text, version }),
     Rider: obj({ id, display_name: text, enabled: bool, available: bool, version }), RiderUpdate: obj({ enabled: bool, expected_version: version, reason_code: reason }),
     SKUInput: obj(sku), SKU: obj({ id, ...sku }),
-    Product: obj({ id, ...product, skus: arr(ref('SKU'), 8) }, ['image_url']),
+    Product: obj({ id, ...product, category: str(80), skus: arr(ref('SKU'), 8) }, ['image_url', 'category']),
     ProductInput: obj({ ...product, skus: { ...arr(ref('SKUInput'), 8), minItems: 1 }, on_sale: bool, reorder_point: int() }, ['image_url']),
     ProductUpdate: obj({ ...product, image_url: { ...imageURL, pattern: `^$|${imageURL.pattern}`, description: 'Send an empty string to remove the image.' }, on_sale: bool, reorder_point: int(), expected_version: version, skus: arr(ref('SKU'), 8) }, [...Object.keys(product), 'on_sale', 'reorder_point', 'skus']),
-    AdminProduct: obj({ id, ...product, skus: arr(ref('SKU'), 8), on_sale: bool, version, inventory: ref('Inventory'), promotion: { oneOf: [ref('Promotion'), { type: 'null' }] } }, ['image_url']),
+    AdminProduct: obj({ id, ...product, category: str(80), skus: arr(ref('SKU'), 8), on_sale: bool, version, inventory: ref('Inventory'), promotion: { oneOf: [ref('Promotion'), { type: 'null' }] } }, ['image_url', 'category']),
     ProductImage: obj({ image_url: imageURL }),
     PromotionTier: obj({ min_qty: qty, discount_bps: int(0, 10000) }),
     Promotion: obj({ starts_at: time, ends_at: time, tiers: arr(ref('PromotionTier'), 20) }),
@@ -53,6 +53,8 @@ export function schemas() {
     RiderCapacity: obj({ active: int(), limit: orderLimits.rider_active_limit, remaining: int(), cod_active: bool }),
     OrderBatchInput: obj({ ids: { type: 'array', items: id, minItems: 1, uniqueItems: true } }),
     OrderBatchResult: obj({ count: int(1) }),
+    RiderLeaderboardEntry: obj({ rank: int(1), rider_id: id, display_name: text, orders: int(), me: bool }),
+    RiderLeaderboard: obj({ local_date: date, entries: arr(ref('RiderLeaderboardEntry'), 100) }),
     PaymentOption: obj({ code: ref('PaymentMethod'), enabled: bool, label: str(80) }), PaymentMethods: obj({ methods: arr(ref('PaymentOption'), 3) }),
     Wallet: obj({ balance_fen: fen, currency: { const: 'CNY', type: 'string' } }),
     CODReceipt: obj({ id, order_id: id, rider_id: id, amount_fen: fen, collected_at: time, remittance_status: ref('RemittanceStatus') }),
@@ -68,6 +70,7 @@ export function schemas() {
     Quote: obj({ quote_id: id, valid_until: time, slot_id: id, lines: arr(ref('PricedLine'), 50), ...deliveryPrice, total_fen: fen, payment_method: ref('PaymentMethod') }, deliveryPriceFields),
     OrderInput: obj({ quote_id: id, note: str(200) }, ['note']), Order: obj(order, deliveryPriceFields),
     AdminOrder: obj({ ...order, address: ref('OrderAddress'), rider_id: id, overdue: bool, merchant_accepted: bool }, ['rider_id', 'merchant_accepted', ...deliveryPriceFields]),
+    MerchantOrder: obj({ ...order, merchant_accepted: bool }, deliveryPriceFields),
     OrderAddress: obj({ ...address, building_name: text }),
     PrepareInput: obj({ sorted: { type: 'boolean', const: true } }),
     DamagedStock: obj({ inventory_id: id, damaged_units: int(1, 99999) }),
@@ -82,7 +85,7 @@ export function schemas() {
     Message: obj({ id, kind: str(64), task_id: id, created_at: time, read_at: time }, ['read_at']),
     MarkRead: obj({ ids: { ...arr(id), minItems: 1, uniqueItems: true } }),
   };
-  for (const name of ['ServiceBuilding', 'Address', 'Rider', 'Product', 'AdminProduct', 'Slot', 'AdminSlot', 'CODReceipt', 'MerchantSettlement', 'Refund', 'Order', 'AdminOrder', 'LobbyTask', 'Earning', 'Message']) {
+  for (const name of ['ServiceBuilding', 'Address', 'Rider', 'Product', 'AdminProduct', 'Slot', 'AdminSlot', 'CODReceipt', 'MerchantSettlement', 'Refund', 'Order', 'AdminOrder', 'MerchantOrder', 'LobbyTask', 'Earning', 'Message']) {
     s[`${name}List`] = obj({ items: arr(ref(name)), next_cursor: { oneOf: [id, { type:'null' }] } });
   }
   return s;

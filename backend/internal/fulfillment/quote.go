@@ -47,6 +47,7 @@ type Quote struct {
 }
 type quoteRow struct {
 	ID, ActorID, StationID string
+	MerchantID             string
 	Mode                   contract.DeliveryMode
 	Method                 contract.PaymentMethod
 	Address                contract.AddressSnapshot
@@ -94,6 +95,10 @@ func (s *Service) Quote(ctx context.Context, tx pgx.Tx, actor identity.Session, 
 	if err != nil {
 		return Quote{}, err
 	}
+	merchant, err := checkoutMerchant(ctx, tx, actor.StationID, items.Lines)
+	if err != nil {
+		return Quote{}, err
+	}
 	prices, err := withDeliveryFee(ctx, tx, actor.StationID, items)
 	if err != nil {
 		return Quote{}, err
@@ -105,7 +110,9 @@ func (s *Service) Quote(ctx context.Context, tx pgx.Tx, actor identity.Session, 
 		ValidUntil: now.Add(5 * time.Minute), SlotID: slot.ID, Lines: priceViews(prices.Lines), Method: in.Method,
 		SubtotalFen: prices.SubtotalFen, DeliveryFeeFen: prices.DeliveryFeeFen, TotalFen: prices.TotalFen,
 	}
-	err = tx.QueryRow(ctx, `INSERT INTO quotes(actor_id,station_id,mode,method,slot_id,address_snapshot,slot_snapshot,priced_snapshot,valid_until,created_at) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10) RETURNING id`, actor.AccountID, actor.StationID, in.Mode, in.Method, slot.ID, a, sl, p, q.ValidUntil, now).Scan(&q.ID)
+	err = tx.QueryRow(ctx, `INSERT INTO quotes(actor_id,station_id,mode,method,slot_id,address_snapshot,slot_snapshot,priced_snapshot,valid_until,created_at,merchant_id)
+		VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,NULLIF($11,'')) RETURNING id`,
+		actor.AccountID, actor.StationID, in.Mode, in.Method, slot.ID, a, sl, p, q.ValidUntil, now, merchant).Scan(&q.ID)
 	return q, err
 }
 func validatePrices(p contract.PricedLines) error {
@@ -129,7 +136,9 @@ func validatePrices(p contract.PricedLines) error {
 func loadQuote(ctx context.Context, tx pgx.Tx, actor identity.Session, id string) (q quoteRow, err error) {
 	var a, slot, p []byte
 	q.ID = id
-	err = tx.QueryRow(ctx, `SELECT actor_id,station_id,mode,method,address_snapshot,slot_snapshot,priced_snapshot,valid_until FROM quotes WHERE id=$1 AND actor_id=$2 AND station_id=$3 FOR SHARE`, id, actor.AccountID, actor.StationID).Scan(&q.ActorID, &q.StationID, &q.Mode, &q.Method, &a, &slot, &p, &q.ValidUntil)
+	err = tx.QueryRow(ctx, `SELECT actor_id,station_id,mode,method,address_snapshot,slot_snapshot,priced_snapshot,valid_until,COALESCE(merchant_id,'')
+		FROM quotes WHERE id=$1 AND actor_id=$2 AND station_id=$3 FOR SHARE`, id, actor.AccountID, actor.StationID).
+		Scan(&q.ActorID, &q.StationID, &q.Mode, &q.Method, &a, &slot, &p, &q.ValidUntil, &q.MerchantID)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return q, ErrNotFound
 	}
@@ -197,6 +206,16 @@ func (s *Service) Create(ctx context.Context, tx pgx.Tx, actor identity.Session,
 	if err != nil {
 		return Order{}, err
 	}
+	merchant, err := checkoutMerchant(ctx, tx, actor.StationID, merchandise.Lines)
+	if errors.Is(err, ErrNotFound) || errors.Is(err, errMixedMerchants) {
+		return Order{}, ErrQuoteChanged
+	}
+	if err != nil {
+		return Order{}, err
+	}
+	if merchant != q.MerchantID {
+		return Order{}, ErrQuoteChanged
+	}
 	current, err := withDeliveryFee(ctx, tx, actor.StationID, merchandise)
 	if errors.Is(err, ErrInvalid) {
 		return Order{}, ErrQuoteChanged
@@ -219,9 +238,9 @@ func (s *Service) Create(ctx context.Context, tx pgx.Tx, actor identity.Session,
 		note = *in.Note
 	}
 	var id string
-	err = tx.QueryRow(ctx, `INSERT INTO orders(quote_id,actor_id,station_id,mode,method,slot_id,address_snapshot,slot_snapshot,total_fen,fee_fen,item_count,status,note,created_at,cod_commission_bps)
-		VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,(SELECT cod_commission_bps FROM stations WHERE id=$3)) RETURNING id`,
-		q.ID, actor.AccountID, actor.StationID, q.Mode, q.Method, q.Slot.ID, a, slot, current.TotalFen, current.DeliveryFeeFen, items, status, note, now).Scan(&id)
+	err = tx.QueryRow(ctx, `INSERT INTO orders(quote_id,actor_id,station_id,mode,method,slot_id,address_snapshot,slot_snapshot,total_fen,fee_fen,item_count,status,note,created_at,cod_commission_bps,merchant_id)
+		VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,(SELECT cod_commission_bps FROM stations WHERE id=$3),NULLIF($15,'')) RETURNING id`,
+		q.ID, actor.AccountID, actor.StationID, q.Mode, q.Method, q.Slot.ID, a, slot, current.TotalFen, current.DeliveryFeeFen, items, status, note, now, merchant).Scan(&id)
 	if err != nil {
 		return Order{}, err
 	}

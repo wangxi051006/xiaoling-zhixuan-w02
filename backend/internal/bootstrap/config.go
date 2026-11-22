@@ -16,6 +16,7 @@ type Config struct {
 	DatabaseURL                          string
 	ProductImageDir                      string
 	UserOrigin, RiderOrigin, AdminOrigin string
+	MerchantOrigin                       string
 	CODEnabled, BalanceEnabled           bool
 	OrdersEnabled, DispatchEnabled       bool
 	AllowTestAuth                        bool
@@ -84,13 +85,14 @@ func LoadConfig(get func(string) string) (Config, error) {
 		}
 	}
 	cfg.UserOrigin, cfg.RiderOrigin, cfg.AdminOrigin = get("USER_ORIGIN"), get("RIDER_ORIGIN"), get("ADMIN_ORIGIN")
+	cfg.MerchantOrigin = get("MERCHANT_ORIGIN")
 	switch get("ALLOW_TEST_AUTH") {
 	case "", "false":
 	case "true":
 		if cfg.Environment == "production" {
 			return Config{}, errors.New("test authentication is forbidden in production")
 		}
-		if _, err := identity.NewLocalEntryPolicy(cfg.UserOrigin, cfg.RiderOrigin, cfg.AdminOrigin); err != nil {
+		if _, err := identity.NewLocalEntryPolicy(cfg.UserOrigin, cfg.RiderOrigin, cfg.AdminOrigin, cfg.MerchantOrigin); err != nil {
 			return Config{}, err
 		}
 		if !net.ParseIP(db.Hostname()).IsLoopback() {

@@ -1,7 +1,6 @@
 import { h, onMounted, ref, watch, type VNodeChild } from 'vue';
-import { apiRequest, ApiError } from '../shared/api.ts';
+import { apiRequest, ApiError, type RequestOptions } from '../shared/api.ts';
 import type { Me, Role } from '../shared/generated.ts';
-import './style.css';
 
 export { money } from '../shared/money.ts';
 export const date=(value:string)=>new Intl.DateTimeFormat('zh-CN',{timeZone:'Asia/Shanghai',month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit',hour12:false}).format(new Date(value));
@@ -24,12 +23,13 @@ export const form=(children:VNodeChild[],submit:()=>unknown)=>h('form',{onSubmit
 
 type Pending={path:string;method:'POST'|'PUT'|'PATCH'|'DELETE';body:unknown;key:string;actor:string;done:(result:any)=>unknown;checked:boolean;onConflict?:(error:ApiError)=>Promise<void>};
 export function session(roles:Role[],refresh:()=>Promise<unknown>,errorMessage?:(error:ApiError)=>string|undefined){
+ const customerEntry = roles.includes('CUSTOMER');
  const me=ref<Me>();const error=ref('');const notice=ref('');const busy=ref(false);const pending=ref<Pending>();const ready=ref(false);let epoch=0;
  watch(()=>sessionKey(me.value),(value,prior)=>{if(value!==prior){epoch++;pending.value=undefined;}},{flush:'sync'});
  watch(()=>me.value?.csrf_token,(value,prior)=>{if(value&&prior&&value!==prior)epoch++;},{flush:'sync'});
  function failure(e:unknown){
    if(e instanceof DOMException&&e.name==='AbortError')return;
-   if(e instanceof ApiError){const message=errorMessage?.(e);error.value=`${message?`${message}（${e.code}）`:`${e.code}：${e.message}`}${e.requestId?`（请求 ${e.requestId}）`:''}`;if(e.status===401){me.value=undefined;ready.value=false;pending.value=undefined;error.value+='。会话已失效，请重新登录。';}if(e.status===403)error.value+='。操作被拒绝，请检查角色或通过员工登录完成近期 MFA。';}
+   if(e instanceof ApiError){const message=errorMessage?.(e);error.value=`${message?`${message}（${e.code}）`:`${e.code}：${e.message}`}${e.requestId?`（请求 ${e.requestId}）`:''}`;if(e.status===401){me.value=undefined;ready.value=false;pending.value=undefined;error.value+='。会话已失效，请重新登录。';}if(e.status===403)error.value+=customerEntry?'。操作被拒绝，请检查当前登录账号的权限。':'。操作被拒绝，请检查角色或通过员工登录完成近期 MFA。';}
    else error.value='网络连接中断或结果未知，请核对服务器状态后重试。';
  }
  async function get<T>(path:string,signal?:AbortSignal):Promise<T>{const token=epoch,controller=new AbortController();const timeout=setTimeout(()=>controller.abort(new DOMException('请求超时，结果未知','TimeoutError')),15000);try{const value=await apiRequest<T>(path,{signal:signal?AbortSignal.any([signal,controller.signal]):controller.signal});if(token!==epoch)throw new DOMException('会话已改变，忽略旧响应','AbortError');return value;}catch(e){if(token!==epoch)throw new DOMException('会话已改变，忽略旧错误','AbortError');if(!(e instanceof DOMException&&e.name==='AbortError'))failure(e);throw e;}finally{clearTimeout(timeout);}}
@@ -66,16 +66,35 @@ export function session(roles:Role[],refresh:()=>Promise<unknown>,errorMessage?:
   busy.value?h('p',{role:'status'},'正在与服务器核对…'):null,
   pending.value?card('操作结果待核对',[h('p','请求可能已经完成。先查看服务器记录，再决定是否重试；重试保留原请求和幂等键。'),btn('核对服务器记录',()=>run(async()=>{await refresh();if(pending.value)pending.value.checked=true;notice.value='已刷新服务器记录，请核对当前状态。';}),busy.value,'check-uncertain'),btn('重试原操作',()=>run(()=>execute(pending.value!)),busy.value||!pending.value.checked,'retry-uncertain')]):null
  ]);}
- function tools(){return h('div',{class:'session'},[me.value?h('span',{'data-testid':'session-ready'},`站点 ${me.value.station_id} · ${me.value.roles.join(' / ')}`):h('span','尚未登录'),btn('恢复会话',()=>recover(true),busy.value,'recover-session'),me.value?btn('退出登录',()=>write('/auth/logout',undefined,()=>{me.value=undefined;ready.value=false;notice.value='已退出登录';}),busy.value):null,h('a',{href:'/api/v1/auth/staff/start'},'员工登录 / MFA')]);}
+ function tools(){
+  return h('div',{class:'session'},[
+   me.value?h('span',{'data-testid':'session-ready'},`站点 ${me.value.station_id} · ${me.value.roles.join(' / ')}`):h('span','尚未登录'),
+   btn('恢复会话',()=>recover(true),busy.value,'recover-session'),
+   me.value?btn('退出登录',()=>write('/auth/logout',undefined,()=>{me.value=undefined;ready.value=false;notice.value='已退出登录';}),busy.value):null,
+   customerEntry?null:h('a',{href:'/api/v1/auth/staff/start'},'员工登录 / MFA'),
+  ]);
+ }
  return {me,error,notice,busy,pending,ready,get,list,recover,run,write,failure,status,tools};
 }
-export function localTestLogin(entry: 'user' | 'rider' | 'admin', s: ReturnType<typeof session>) {
+export function localTestLogin(entry: 'user' | 'rider' | 'admin' | 'merchant', s: ReturnType<typeof session>) {
  const enabled = ref(false), account = ref(''), password = ref('');
  const path = '/auth/test/login';
+ async function request<T>(timeoutMs: number, options?: RequestOptions): Promise<T> {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+   return await apiRequest<T>(path, {...options, signal: controller.signal});
+  } catch (error) {
+   if (controller.signal.aborted) throw new DOMException('请求超时，结果未知', 'TimeoutError');
+   throw error;
+  } finally {
+   clearTimeout(timer);
+  }
+ }
  onMounted(async () => {
   if (location.hostname !== `${entry}.localhost`) return;
   try {
-   const result = await apiRequest<{entry: string}>(path, {signal: AbortSignal.timeout(5000)});
+   const result = await request<{entry: string}>(5000);
    enabled.value = result?.entry === entry;
   } catch { /* Test mode is unavailable; keep the normal sign-in options. */ }
  });
@@ -88,7 +107,7 @@ export function localTestLogin(entry: 'user' | 'rider' | 'admin', s: ReturnType<
   const body = {account: account.value.trim(), password: password.value};
   password.value = '';
   try {
-   await apiRequest<void>(path, {method: 'POST', body, signal: AbortSignal.timeout(10000)});
+   await request<void>(10000, {method: 'POST', body});
   } catch (e) {
    if (e instanceof ApiError && e.status === 401) { s.error.value = '账号或密码不正确。'; return; }
    throw e;

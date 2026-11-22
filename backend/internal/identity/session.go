@@ -88,7 +88,7 @@ func (s *Sessions) issueAtMode(ctx context.Context, tx pgx.Tx, accountID, issuer
 	now := s.clock.Now().UTC()
 	if entry == UserEntry {
 		mfa = time.Time{}
-	} else if (entry != AdminEntry && entry != RiderEntry) || mfa.IsZero() || mfa.After(now) || now.Sub(mfa) >= recentMFAWindow {
+	} else if (entry != AdminEntry && entry != RiderEntry && entry != MerchantEntry) || mfa.IsZero() || mfa.After(now) || now.Sub(mfa) >= recentMFAWindow {
 		return "", Session{}, ErrSession
 	}
 	token := secretToken()

@@ -32,6 +32,8 @@ func writeError(w http.ResponseWriter, r *http.Request, err error) {
 	switch {
 	case errors.As(err, &large):
 		status, code = 413, "BODY_TOO_LARGE"
+	case errors.Is(err, errMixedMerchants):
+		status, code = 400, "MIXED_MERCHANTS"
 	case errors.Is(err, ErrInvalid), errors.Is(err, catalog.ErrInvalid), errors.Is(err, schedule.ErrInvalid), errors.Is(err, settlement.ErrInvalid):
 		status, code = 400, "BAD_REQUEST"
 	case errors.Is(err, ErrNotFound), errors.Is(err, identity.ErrObjectNotFound), errors.Is(err, settlement.ErrNotFound):
@@ -127,6 +129,13 @@ func (h *HTTP) mutate(w http.ResponseWriter, r *http.Request, actor identity.Ses
 	}
 	var response json.RawMessage
 	err = platform.InTransaction(r.Context(), h.Service.Pool, func(tx pgx.Tx) error {
+		if actor.Entry == identity.MerchantEntry {
+			merchantID, err := identity.MerchantID(r.Context(), tx, actor)
+			if err != nil {
+				return err
+			}
+			digest = sha256.Sum256(append(append(canonical, 0), merchantID...))
+		}
 		result, e := tx.Exec(r.Context(), `INSERT INTO idempotency_keys(actor_id,command,key,request_digest) VALUES($1,$2,$3,$4) ON CONFLICT DO NOTHING`, actor.AccountID, command, keys[0], digest[:])
 		if e != nil {
 			return e
@@ -220,6 +229,14 @@ func (h *HTTP) serve(w http.ResponseWriter, r *http.Request, actor identity.Sess
 		return
 	}
 	switch route {
+	case "POST /merchant/order-batches/accept", "POST /merchant/order-batches/ready":
+		var input batchInput
+		accept := route == "POST /merchant/order-batches/accept"
+		h.mutate(w, r, actor, route, 200, &input, false, func(tx pgx.Tx) (commandResult, error) {
+			err := s.merchantBatch(ctx, tx, actor, input.IDs, accept)
+			return commandResult{body: batchResult{Count: len(input.IDs)}, objectID: actor.StationID}, err
+		})
+		return
 	case "PUT /admin/order-limits":
 		var input orderLimitsUpdate
 		h.mutate(w, r, actor, "updateOrderLimits", 200, &input, false, func(tx pgx.Tx) (commandResult, error) {

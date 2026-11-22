@@ -79,7 +79,7 @@ func run(ctx context.Context, logger *slog.Logger, args []string) error {
 		if cfg.AllowTestAuth {
 			entryPolicy = identity.NewLocalEntryPolicy
 		}
-		policy, err := entryPolicy(cfg.UserOrigin, cfg.RiderOrigin, cfg.AdminOrigin)
+		policy, err := entryPolicy(cfg.UserOrigin, cfg.RiderOrigin, cfg.AdminOrigin, cfg.MerchantOrigin)
 		if err != nil {
 			return errors.New("invalid identity entry configuration")
 		}
@@ -111,7 +111,7 @@ func run(ctx context.Context, logger *slog.Logger, args []string) error {
 		notifier = outbox
 	}
 	orders := &fulfillment.Service{Pool: pool, Clock: clock, Identity: directory, Catalog: catalog.Store{Clock: clock}, Schedule: schedule.Store{}, Settlement: settlement.Store{Policy: payments}, RiderState: directory, AlertSink: newOrderAlertLog(logger), EmailNotifier: notifier, Policy: payments, AcceptNewOrders: cfg.OrdersEnabled, AllowDispatch: cfg.DispatchEnabled}
-	options := bootstrap.ApplicationOptions{Pool: pool, Clock: clock, UserOrigin: cfg.UserOrigin, RiderOrigin: cfg.RiderOrigin, AdminOrigin: cfg.AdminOrigin, Payments: payments, Emails: emails, Staff: staff, Logger: logger, Orders: orders, ProductImageDir: cfg.ProductImageDir}
+	options := bootstrap.ApplicationOptions{Pool: pool, Clock: clock, UserOrigin: cfg.UserOrigin, RiderOrigin: cfg.RiderOrigin, AdminOrigin: cfg.AdminOrigin, MerchantOrigin: cfg.MerchantOrigin, Payments: payments, Emails: emails, Staff: staff, Logger: logger, Orders: orders, ProductImageDir: cfg.ProductImageDir}
 	var handler http.Handler
 	if cfg.AllowTestAuth {
 		setupCtx, cancel := context.WithTimeout(ctx, 10*time.Second)

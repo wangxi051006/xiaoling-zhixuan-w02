@@ -14,6 +14,8 @@ test('local password login works independently on all three entries', { skip: !p
   const browser = await chromium.launch({executablePath: process.env.BROWSER_EXECUTABLE || undefined});
   try {
     const context = await browser.newContext();
+    // Match the older Chromium runtime in WeChat DevTools.
+    await context.addInitScript(() => { delete AbortSignal.timeout; });
     const ids = new Set();
     const pages = [];
     for (const [entry, expected] of Object.entries(roles)) {

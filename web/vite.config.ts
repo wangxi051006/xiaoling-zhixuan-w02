@@ -14,8 +14,16 @@ export default defineConfig(({ command, mode }) => {
   }
   return {
     appType: 'mpa',
-    server: { host: '127.0.0.1', proxy: { '/api/v1/': { target: target.origin, changeOrigin: false } } },
+    server: {
+      host: '127.0.0.1',
+      proxy: { '/api/v1/': { target: target.origin, changeOrigin: false } },
+      // Windows 上编辑器/工具原子保存会在源文件旁生成 .xxx.tmpdir/ 与 .tmp 临时文件，
+      // 文件被占用时 chokidar 抛 EBUSY 会直接带崩 dev server，这里忽略这些临时路径。
+      watch: { ignored: ['**/*.tmpdir/**', '**/.entry.ts.*/**', '**/*.tmp'] },
+    },
     preview: { host: '127.0.0.1' },
-    build: { rollupOptions: { input: { user: entry('user'), rider: entry('rider'), admin: entry('admin') } } },
+    build: mode === 'merchant'
+      ? { outDir: 'dist-merchant', rollupOptions: { input: { merchant: entry('merchant') } } }
+      : { rollupOptions: { input: { user: entry('user'), rider: entry('rider'), admin: entry('admin') } } },
   };
 });

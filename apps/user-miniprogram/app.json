@@ -1,0 +1,8 @@
+{
+  "pages": ["pages/store/index"],
+  "window": {
+    "navigationBarTitleText": "校零智选",
+    "navigationBarBackgroundColor": "#fbf5ea",
+    "navigationBarTextStyle": "black"
+  }
+}

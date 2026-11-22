@@ -69,6 +69,14 @@ async function withPage(entry, session, run) {
   }
 }
 
+test('user entry offers customer sign-in without linking to the staff endpoint', async () => {
+  await withPage('user', null, async (page) => {
+    assert.equal(await page.locator('a[href="/api/v1/auth/staff/start"]').count(), 0);
+    assert.equal(await page.getByRole('button', { name: '邮箱登录' }).count(), 1);
+    assert.equal(await page.getByRole('button', { name: '手机号登录' }).count(), 1);
+  });
+});
+
 test('user entry completes the email register flow through the frozen contract', async () => {
   await withPage('user', null, async (page, seen) => {
     for (const label of ['邮箱登录', '邮箱注册', '手机号登录']) {

@@ -56,6 +56,15 @@
  ["P05","post","/admin/order-batches/ready","readyOrderBatch","OPERATOR","OrderBatchInput","OrderBatchResult",200,"key"],
   ["P05","get","/admin/orders","listAdminOrders","OPERATOR",null,"AdminOrderList",200,"list"],
   ["P05","get","/admin/orders/{id}","getAdminOrder","OPERATOR",null,"AdminOrder"],
+  ["Merchant","get","/merchant/orders","listMerchantOrders","MERCHANT",null,"MerchantOrderList",200,"list"],
+  ["Merchant","get","/merchant/orders/{id}","getMerchantOrder","MERCHANT",null,"MerchantOrder"],
+  ["Merchant","post","/merchant/order-batches/accept","merchantAcceptOrders","MERCHANT","OrderBatchInput","OrderBatchResult",200,"key"],
+  ["Merchant","post","/merchant/order-batches/ready","merchantReadyOrders","MERCHANT","OrderBatchInput","OrderBatchResult",200,"key"],
+  ["Merchant","get","/merchant/products","listMerchantProducts","MERCHANT",null,"AdminProductList",200,"list"],
+  ["Merchant","post","/merchant/products","createMerchantProduct","MERCHANT","ProductInput","AdminProduct",201,"key"],
+  ["Merchant","patch","/merchant/products/{id}","updateMerchantProduct","MERCHANT","ProductUpdate","AdminProduct"],
+  ["Merchant","post","/merchant/inventory/adjustments","adjustMerchantInventory","MERCHANT","InventoryAdjustment","Inventory",201,"key"],
+  ["Merchant","get","/merchant/settlements","listOwnMerchantSettlements","MERCHANT",null,"MerchantSettlementList",200,"date list"],
   ["P05","post","/admin/orders/{id}/prepare","prepareOrder","OPERATOR","PrepareInput","AdminOrder",200,"key"],
   ["P05","post","/admin/orders/{id}/dispatch","dispatchOrder","OPERATOR",null,"AdminOrder",200,"key"],
   ["P05","post","/admin/orders/{id}/reclaim","reclaimOrder","OPERATOR","Reason","AdminOrder",200,"key"],
@@ -65,6 +74,7 @@
   ["P05","post","/admin/orders/{id}/refund","requestRefund","OPERATOR","Reason","Refund",201,"key mfa"],
   ["P05","get","/admin/dashboard","getDashboard","OPERATOR FINANCE",null,"Dashboard",200,"date"],
   ["P05","put","/rider/availability","setAvailability","RIDER","Availability","Availability"],
+  ["P05","get","/rider/availability","getAvailability","RIDER",null,"Availability"],
   ["P05","get","/rider/tasks","listTasks","RIDER",null,"LobbyTaskList",200,"list"],
  ["P05","get","/rider/capacity","getRiderCapacity","RIDER",null,"RiderCapacity"],
  ["P05","post","/rider/task-batches/claim","claimTaskBatch","RIDER","OrderBatchInput","OrderBatchResult",200,"key"],
@@ -77,5 +87,6 @@
   ["P05","get","/rider/history","listRiderHistory","RIDER",null,"LobbyTaskList",200,"list"],
   ["P05","get","/rider/earnings","listRiderEarnings","RIDER",null,"EarningList",200,"date list"],
   ["P05","get","/rider/messages","listRiderMessages","RIDER",null,"MessageList",200,"list"],
-  ["P05","post","/rider/messages/read","markMessagesRead","RIDER","MarkRead","Acknowledgment",200,"key"]
+  ["P05","post","/rider/messages/read","markMessagesRead","RIDER","MarkRead","Acknowledgment",200,"key"],
+  ["P05","get","/rider/leaderboard","riderLeaderboard","RIDER",null,"RiderLeaderboard",200,"date"]
 ]

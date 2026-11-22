@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- 未通过 Digital Asset Links 校验时退回自定义标签页（仍能打开骑手端，只是显示地址栏） -->
+    <string name="fallback_strategy" translatable="false">customtabs</string>
+</resources>

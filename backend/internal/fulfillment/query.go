@@ -64,10 +64,11 @@ func nextPage[T any](items []T, p pageInput, id func(T) string) page[T] {
 	return page[T]{Items: items[:p.Limit], Next: &cursor}
 }
 func (h *HTTP) read(w http.ResponseWriter, r *http.Request, actor identity.Session, route string) {
-	dateAllowed := route == "GET /admin/dashboard" || route == "GET /rider/earnings"
+	dateAllowed := route == "GET /admin/dashboard" || route == "GET /rider/earnings" || route == "GET /rider/leaderboard"
 	detail := strings.Contains(route, "{id}")
 	list := !detail && route != "GET /admin/dashboard" && route != "GET /admin/delivery-fee" &&
-		route != "GET /admin/order-limits" && route != "GET /rider/capacity"
+		route != "GET /admin/order-limits" && route != "GET /rider/capacity" && route != "GET /rider/leaderboard" &&
+		route != "GET /rider/availability"
 	p, err := readPage(r.URL.RawQuery, dateAllowed, list)
 	if err != nil {
 		writeError(w, r, err)
@@ -92,6 +93,8 @@ func (h *HTTP) read(w http.ResponseWriter, r *http.Request, actor identity.Sessi
 			}
 		}
 		switch route {
+		case "GET /merchant/orders", "GET /merchant/orders/{id}":
+			return h.Service.merchantOrders(r.Context(), tx, actor, p, r.PathValue("id"))
 		case "GET /orders/{id}":
 			return h.Service.Order(r.Context(), tx, actor, r.PathValue("id"), false)
 		case "GET /admin/orders/{id}":
@@ -112,6 +115,10 @@ func (h *HTTP) read(w http.ResponseWriter, r *http.Request, actor identity.Sessi
 			return readOrderLimits(r.Context(), tx, actor.StationID, false)
 		case "GET /rider/capacity":
 			return readRiderCapacity(r.Context(), tx, actor.StationID, actor.AccountID)
+		case "GET /rider/availability":
+			return readAvailability(r.Context(), h.Service.RiderState, tx, actor)
+		case "GET /rider/leaderboard":
+			return riderLeaderboard(r.Context(), tx, actor, p.Date)
 		case "GET /admin/dashboard":
 			return dashboard(r.Context(), tx, actor, p.Date)
 		}
@@ -209,6 +216,46 @@ func earnings(ctx context.Context, tx pgx.Tx, actor identity.Session, p pageInpu
 		items = []Earning{}
 	}
 	return nextPage(items, p, func(v Earning) string { return v.ID }), err
+}
+
+type LeaderboardEntry struct {
+	Rank        int    `json:"rank"`
+	RiderID     string `json:"rider_id"`
+	DisplayName string `json:"display_name"`
+	Orders      int    `json:"orders"`
+	Me          bool   `json:"me"`
+}
+type RiderLeaderboard struct {
+	LocalDate string             `json:"local_date"`
+	Entries   []LeaderboardEntry `json:"entries"`
+}
+
+func riderLeaderboard(ctx context.Context, tx pgx.Tx, actor identity.Session, localDate string) (RiderLeaderboard, error) {
+	rows, err := tx.Query(ctx, `SELECT e.rider_id,a.display_name,COUNT(*) AS orders
+		FROM rider_earnings e
+		JOIN delivery_tasks t ON t.id=e.task_id AND t.rider_id=e.rider_id
+		JOIN orders o ON o.id=t.order_id
+		JOIN accounts a ON a.id=e.rider_id
+		WHERE o.station_id=$1 AND (e.recorded_at AT TIME ZONE 'Asia/Shanghai')::date=$2::text::date
+		GROUP BY e.rider_id,a.display_name
+		ORDER BY orders DESC,e.rider_id
+		LIMIT 100`, actor.StationID, localDate)
+	if err != nil {
+		return RiderLeaderboard{}, err
+	}
+	entries, err := pgx.CollectRows(rows, func(r pgx.CollectableRow) (LeaderboardEntry, error) {
+		var v LeaderboardEntry
+		e := r.Scan(&v.RiderID, &v.DisplayName, &v.Orders)
+		return v, e
+	})
+	if entries == nil {
+		entries = []LeaderboardEntry{}
+	}
+	for i := range entries {
+		entries[i].Rank = i + 1
+		entries[i].Me = entries[i].RiderID == actor.AccountID
+	}
+	return RiderLeaderboard{LocalDate: localDate, Entries: entries}, err
 }
 
 type Message struct {

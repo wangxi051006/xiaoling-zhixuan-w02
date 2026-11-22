@@ -77,7 +77,7 @@ func TestP05FullEmptyAndLegalPrefixUpgradeReplay(t *testing.T) {
 	// Compare only columns that existed in the prefix schema.
 	addedLater := map[string][]string{
 		"accounts": {"account_type", "email", "email_verified_at"},
-		"products": {"image_url"},
+		"products": {"image_url", "merchant_id"},
 		"stations": {"delivery_fee_fen", "delivery_fee_version", "merchant_batch_limit", "rider_active_limit", "order_limits_version", "cod_commission_bps"},
 	}
 	beforeUpgrade := tableFingerprintsWithout(t, f.ctx, p, true, addedLater)

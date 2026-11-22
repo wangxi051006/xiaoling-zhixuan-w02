@@ -26,7 +26,8 @@ var localTestCredential, _ = hex.DecodeString("8d969eef6ecad3c29a3a629280e686cf0
 func localTestAccountID(entry Entry) string { return "xiaoling-local-test-" + string(entry) }
 
 func isLocalTestAccount(id string) bool {
-	return id == localTestAccountID(UserEntry) || id == localTestAccountID(RiderEntry) || id == localTestAccountID(AdminEntry)
+	return id == localTestAccountID(UserEntry) || id == localTestAccountID(RiderEntry) ||
+		id == localTestAccountID(AdminEntry) || id == localTestAccountID(MerchantEntry)
 }
 
 func loopbackPeer(r *http.Request) bool {
@@ -67,7 +68,11 @@ func (h *IdentityHTTP) seedLocalTestAccounts(ctx context.Context) error {
 			{UserEntry, "Test customer", []string{"CUSTOMER"}},
 			{RiderEntry, "Test rider", []string{"RIDER"}},
 			{AdminEntry, "Test administrator", []string{"FINANCE", "OPERATOR", "SECURITY_ADMIN"}},
+			{MerchantEntry, "Test merchant", []string{"MERCHANT"}},
 		} {
+			if _, configured := h.policy.origins[fixture.entry]; !configured {
+				continue
+			}
 			id := localTestAccountID(fixture.entry)
 			var result pgx.Rows
 			var err error
@@ -109,6 +114,14 @@ func (h *IdentityHTTP) seedLocalTestAccounts(ctx context.Context) error {
 					return err
 				}
 			}
+			if fixture.entry == MerchantEntry {
+				if _, err := tx.Exec(ctx, `INSERT INTO merchants(id,station_id,name) VALUES('xiaoling-local-test-shop',$1,'测试店铺')`, station); err != nil {
+					return err
+				}
+				if _, err := tx.Exec(ctx, `INSERT INTO merchant_staff(account_id,station_id,merchant_id) VALUES($1,$2,'xiaoling-local-test-shop')`, id, station); err != nil {
+					return err
+				}
+			}
 		}
 		return nil
 	})
@@ -119,7 +132,7 @@ func (h *IdentityHTTP) testLoginEntry(w http.ResponseWriter, r *http.Request) (E
 		identityStatus(w, r, http.StatusNotFound)
 		return "", false
 	}
-	return h.entry(w, r, UserEntry, RiderEntry, AdminEntry)
+	return h.entry(w, r, UserEntry, RiderEntry, AdminEntry, MerchantEntry)
 }
 
 func (h *IdentityHTTP) testLoginAvailability(w http.ResponseWriter, r *http.Request) {

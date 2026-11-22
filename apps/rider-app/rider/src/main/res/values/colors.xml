@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- 取自 design-tokens.css 的品牌色 -->
+    <color name="brand_red">#D9603A</color>
+    <color name="brand_paper">#FBF5EA</color>
+    <color name="brand_card">#FFFDF8</color>
+    <color name="brand_ink">#2E2A24</color>
+    <color name="brand_green">#35664F</color>
+
+    <!-- 骑手端移动工作台：蓝色顶栏 + 白色卡片（web/src/rider/app.css） -->
+    <color name="status_bar">#2F6FED</color>
+    <color name="status_bar_dark">#151A22</color>
+    <color name="navigation_bar">#FFFFFF</color>
+    <color name="navigation_bar_dark">#151A22</color>
+    <color name="splash_background">#F4F6FA</color>
+</resources>

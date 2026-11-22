@@ -1,0 +1,13 @@
+.unavailable {
+  display: flex;
+  flex-direction: column;
+  gap: 32rpx;
+  align-items: center;
+  padding: 96rpx 32rpx;
+  color: #2e2a24;
+}
+
+.unavailable button {
+  color: #fffdf8;
+  background: #35664f;
+}

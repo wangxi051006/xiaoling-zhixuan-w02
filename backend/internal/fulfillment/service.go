@@ -53,7 +53,7 @@ type HTTP struct {
 func (h *HTTP) Register(mux *http.ServeMux) {
 	user := []string{"POST /checkout/quote", "POST /orders", "GET /orders", "GET /orders/{id}", "POST /orders/{id}/cancel", "POST /orders/{id}/urge"}
 	admin := []string{"GET /admin/delivery-fee", "PUT /admin/delivery-fee", "GET /admin/orders", "GET /admin/orders/{id}", "POST /admin/orders/{id}/prepare", "POST /admin/orders/{id}/dispatch", "POST /admin/orders/{id}/reclaim", "POST /admin/orders/{id}/cancel", "POST /admin/orders/{id}/restock", "POST /admin/orders/{id}/return-inspect", "POST /admin/orders/{id}/refund", "GET /admin/dashboard"}
-	rider := []string{"PUT /rider/availability", "GET /rider/tasks", "GET /rider/tasks/{id}", "POST /rider/tasks/{id}/claim", "POST /rider/tasks/{id}/pickup", "POST /rider/tasks/{id}/deliver", "POST /rider/tasks/{id}/return", "GET /rider/history", "GET /rider/earnings", "GET /rider/messages", "POST /rider/messages/read"}
+	rider := []string{"PUT /rider/availability", "GET /rider/availability", "GET /rider/tasks", "GET /rider/tasks/{id}", "POST /rider/tasks/{id}/claim", "POST /rider/tasks/{id}/pickup", "POST /rider/tasks/{id}/deliver", "POST /rider/tasks/{id}/return", "GET /rider/history", "GET /rider/earnings", "GET /rider/leaderboard", "GET /rider/messages", "POST /rider/messages/read"}
 	add := func(route string, entry identity.Entry, mfa bool, roles ...contract.Role) {
 		parts := strings.SplitN(route, " ", 2)
 		mux.HandleFunc(parts[0]+" /api/v1"+parts[1], func(w http.ResponseWriter, r *http.Request) {
@@ -70,6 +70,9 @@ func (h *HTTP) Register(mux *http.ServeMux) {
 	}
 	for _, r := range user {
 		add(r, identity.UserEntry, false, contract.RoleCustomer)
+	}
+	for _, r := range []string{"GET /merchant/orders", "GET /merchant/orders/{id}", "POST /merchant/order-batches/accept", "POST /merchant/order-batches/ready"} {
+		add(r, identity.MerchantEntry, false, contract.RoleMerchant)
 	}
 	for _, r := range admin {
 		roles := []contract.Role{contract.RoleOperator}

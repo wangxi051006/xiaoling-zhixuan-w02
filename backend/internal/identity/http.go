@@ -126,7 +126,7 @@ func (h *IdentityHTTP) entry(w http.ResponseWriter, r *http.Request, entries ...
 		return "", false
 	}
 	for _, entry := range entries {
-		if strings.EqualFold(r.Host, h.policy.origins[entry].host) {
+		if cfg, ok := h.policy.origins[entry]; ok && strings.EqualFold(r.Host, cfg.host) {
 			return entry, true
 		}
 	}
@@ -151,7 +151,7 @@ func cookieValue(r *http.Request, name string) string {
 	return cookies[0].Value
 }
 
-var allRoles = []contract.Role{contract.RoleCustomer, contract.RoleRider, contract.RoleOperator, contract.RoleFinance, contract.RoleSecurityAdmin}
+var allRoles = []contract.Role{contract.RoleCustomer, contract.RoleRider, contract.RoleOperator, contract.RoleFinance, contract.RoleSecurityAdmin, contract.RoleMerchant}
 
 func (h *IdentityHTTP) authorized(w http.ResponseWriter, r *http.Request, entry Entry, mfa bool, roles ...contract.Role) (Session, bool) {
 	session, err := h.sessions.lookup(r.Context(), cookieValue(r, SessionCookieName), entry, h.policy.local && loopbackPeer(r))
@@ -273,7 +273,7 @@ func staffHeaders(w http.ResponseWriter) {
 }
 
 func (h *IdentityHTTP) startStaff(w http.ResponseWriter, r *http.Request) {
-	entry, ok := h.entry(w, r, AdminEntry, RiderEntry)
+	entry, ok := h.entry(w, r, AdminEntry, RiderEntry, MerchantEntry)
 	if !ok {
 		return
 	}
@@ -297,7 +297,7 @@ func (h *IdentityHTTP) startStaff(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *IdentityHTTP) completeStaff(w http.ResponseWriter, r *http.Request) {
-	entry, ok := h.entry(w, r, AdminEntry, RiderEntry)
+	entry, ok := h.entry(w, r, AdminEntry, RiderEntry, MerchantEntry)
 	if !ok {
 		return
 	}
@@ -325,7 +325,7 @@ func (h *IdentityHTTP) completeStaff(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *IdentityHTTP) me(w http.ResponseWriter, r *http.Request) {
-	entry, ok := h.entry(w, r, UserEntry, RiderEntry, AdminEntry)
+	entry, ok := h.entry(w, r, UserEntry, RiderEntry, AdminEntry, MerchantEntry)
 	if !ok {
 		return
 	}
@@ -335,7 +335,7 @@ func (h *IdentityHTTP) me(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *IdentityHTTP) logout(w http.ResponseWriter, r *http.Request) {
-	entry, ok := h.entry(w, r, UserEntry, RiderEntry, AdminEntry)
+	entry, ok := h.entry(w, r, UserEntry, RiderEntry, AdminEntry, MerchantEntry)
 	if !ok {
 		return
 	}

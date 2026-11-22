@@ -12,10 +12,10 @@ test('P06 LOCAL REAL: compiled entries → Go identity/API/worker → isolated P
  const call=async(a,method,path,body,want=200,key)=>{const r=await h.request(a,method,path,body,key);assert.equal(r.status,want,`${method} ${path}: ${r.body?.code??r.status}`);return r.body;};
  async function scenario(id,name,fn){await t.test(id+' '+name,async()=>{const startedAt=new Date().toISOString();try{await fn();evidence.push({id,name,status:'PASS',level:'LOCAL_REAL_PROPOSED_WIRING',startedAt,finishedAt:new Date().toISOString()});}catch(e){evidence.push({id,name,status:'FAIL',level:'LOCAL_REAL_PROPOSED_WIRING',startedAt,finishedAt:new Date().toISOString(),error:e.message});throw e;}});}
  const tab=(a,name)=>a.page.getByRole('button',{name,exact:true}).click();
- async function uiOrder(a,{mode='ASAP',method='COD',slot='later',day}={}){
-  await a.page.getByTestId('session-ready').waitFor();await a.page.getByTestId('add-'+h.info.sku).click();await a.page.getByRole('button',{name:/^购物袋/}).click();
+ async function uiOrder(a,{mode='ASAP',slot='later',day}={}){
+  await a.page.getByTestId('session-ready').waitFor();await a.page.getByTestId('add-'+h.info.sku).click();await a.page.getByTestId('start-checkout').click();
   await a.page.getByLabel('配送地址',{exact:true}).selectOption('a'+a.id.replace('buyer',''));await a.page.getByLabel('配送方式',{exact:true}).selectOption(mode);if(mode==='SCHEDULED'){if(day){await a.page.getByLabel('预约日期',{exact:true}).fill(day);await a.page.getByLabel('服务窗口',{exact:true}).locator('option[value="'+slot+'"]').waitFor({state:'attached'});}await a.page.getByLabel('服务窗口',{exact:true}).selectOption(slot);}
-  await a.page.getByRole('radio',{name:method==='BALANCE'?'余额':'货到付款',exact:true}).check();await a.page.getByTestId('quote').click();await a.page.getByTestId('confirm-order').waitFor();if(!checkoutShot){for(const w of [1440,390])await h.shot(a,'user-checkout',w);checkoutShot=true;}
+  assert.ok(await a.page.getByRole('radio',{name:'余额',exact:true}).isChecked());await a.page.getByTestId('quote').click();await a.page.getByTestId('confirm-order').waitFor();if(!checkoutShot){for(const w of [1440,390])await h.shot(a,'user-checkout',w);checkoutShot=true;}
   const response=a.page.waitForResponse(r=>r.url().endsWith('/api/v1/orders')&&r.request().method()==='POST');await a.page.getByTestId('confirm-order').click();const r=await response;assert.equal(r.status(),201);const order=await r.json();await a.page.getByTestId('order-detail').waitFor();return order;
  }
  async function apiOrder(a,{mode='ASAP',method='COD',slot='later'}={}){const quote=await call(a,'POST','/checkout/quote',{lines:[{sku_id:h.info.sku,qty:1}],address_id:'a'+a.id.replace('buyer',''),delivery_mode:mode,payment_method:method,...(mode==='SCHEDULED'?{slot_id:slot}:{})},201);return call(a,'POST','/orders',{quote_id:quote.quote_id},201);}
@@ -30,7 +30,7 @@ test('P06 LOCAL REAL: compiled entries → Go identity/API/worker → isolated P
   await admin.page.getByTestId(action).click();const r=await response;assert.equal(r.status(),200);return r.json();
  }
  async function dispatch(order){await adminAction('prepare',order);await adminAction('dispatch',order);const list=await call(rider,'GET','/rider/tasks');const task=list.items.find(v=>v.order_status==='READY_FOR_CLAIM');assert.ok(task);return task;}
- async function uiDeliver(task,urgeActor){await rider.page.reload();if(!currentShot)for(const w of [1440,390])await h.shot(rider,'rider-hall',w);await rider.page.getByTestId('claim-'+task.id).click();await rider.page.getByTestId('pickup').waitFor();await rider.page.getByTestId('pickup').click();await rider.page.getByLabel('已全额收到货到付款',{exact:true}).waitFor();if(!currentShot){for(const w of [1440,390])await h.shot(rider,'rider-current-task',w);currentShot=true;}if(urgeActor){await call(urgeActor,'POST','/orders/'+delivered.id+'/urge',undefined,202);await h.control('advance',{Minutes:0});await rider.page.getByTestId('refresh-tasks').click();await tab(rider,'消息');await rider.page.getByTestId('read-all').click();const mail=await call(rider,'GET','/rider/messages');assert.ok(mail.items.length>0&&mail.items.every(m=>m.read_at));for(const w of [1440,390])await h.shot(rider,'rider-messages',w);await tab(rider,'当前任务');}await rider.page.getByLabel('已全额收到货到付款',{exact:true}).check();const response=rider.page.waitForResponse(r=>r.url().endsWith('/'+task.id+'/deliver'));await rider.page.getByTestId('deliver').click();assert.equal((await response).status(),200);}
+ async function uiDeliver(task,urgeActor){await rider.page.reload();if(!currentShot)for(const w of [1440,390])await h.shot(rider,'rider-hall',w);await rider.page.getByTestId('claim-'+task.id).click();await rider.page.getByTestId('pickup').waitFor();await rider.page.getByTestId('pickup').click();await rider.page.getByLabel('已全额收到货到付款',{exact:true}).waitFor();if(!currentShot){for(const w of [1440,390])await h.shot(rider,'rider-current-task',w);currentShot=true;}if(urgeActor){await call(urgeActor,'POST','/orders/'+delivered.id+'/urge',undefined,202);await h.control('advance',{Minutes:0});await rider.page.getByTestId('refresh-tasks').click();await tab(rider,'消息');await rider.page.getByTestId('read-all').click();const mail=await call(rider,'GET','/rider/messages');assert.ok(mail.items.length>0&&mail.items.every(m=>m.read_at));for(const w of [1440,390])await h.shot(rider,'rider-messages',w);await tab(rider,'配送中');}await rider.page.getByLabel('已全额收到货到付款',{exact:true}).check();const response=rider.page.waitForResponse(r=>r.url().endsWith('/'+task.id+'/deliver'));await rider.page.getByTestId('deliver').click();assert.equal((await response).status(),200);}
  try {
   await scenario('ENTRY','three real /me sessions and CSRF writes; migrated UI is mountable',async()=>{
    user=await h.actor('buyer1','user');rider=await h.actor('r1','rider');admin=await h.actor('op','admin');fin=await h.actor('fin','admin');fin2=await h.actor('fin2','admin');
@@ -51,12 +51,14 @@ test('P06 LOCAL REAL: compiled entries → Go identity/API/worker → isolated P
    await tab(admin,'服务时段');const row=admin.page.locator('article').filter({has:admin.page.getByTestId('save-slot-later')});await row.getByLabel('容量',{exact:true}).fill('99');await write('/admin/slots/later',()=>admin.page.getByTestId('save-slot-later').click());await row.getByLabel('容量',{exact:true}).fill('100');await write('/admin/slots/later',()=>admin.page.getByTestId('save-slot-later').click());
    await tab(admin,'骑手管理');await write('/admin/riders/r2',()=>admin.page.getByTestId('rider-r2').click());assert.equal((await call(admin,'GET','/admin/riders')).items.find(r=>r.id==='r2').enabled,false);await write('/admin/riders/r2',()=>admin.page.getByTestId('rider-r2').click());assert.equal((await call(admin,'GET','/admin/riders')).items.find(r=>r.id==='r2').enabled,true);
   });
-  await scenario('UI-01 / PAY-01','immediate COD through all three compiled UIs; refresh and unique income',async()=>{
-   delivered=await uiOrder(user);assert.equal(delivered.settlement_status,'COD_UNCOLLECTED');assert.ok(await user.page.getByText('送达后付款',{exact:true}).count());
+  await scenario('UI-01 / PAY-01','legacy immediate COD through all three compiled UIs; refresh and unique income',async()=>{
+   delivered=await apiOrder(user);assert.equal(delivered.settlement_status,'COD_UNCOLLECTED');
+   await tab(user,'我的订单');await tab(user,'刷新订单');await user.page.getByTestId('order-'+delivered.id).click();
+   await user.page.getByText('送达后付款',{exact:true}).waitFor();
    const task=await dispatch(delivered);const lobby=await call(rider,'GET','/rider/tasks');assert.ok(lobby.items.every(t=>!('address'in t)));await uiDeliver(task,user);
    const o=await call(user,'GET','/orders/'+delivered.id);assert.equal(o.status,'DELIVERED');assert.equal(o.settlement_status,'COD_COLLECTED');
    const before=await h.control('snapshot');assert.equal(before.earnings,1);assert.equal(before.receipts,1);
-   await user.page.reload();await tab(user,'我的订单');await user.page.getByTestId('order-'+o.id).click();assert.ok(await user.page.getByText('已送达',{exact:true}).count());await selectAdmin(o);await tab(rider,'历史与收入');
+   await user.page.reload();await tab(user,'我的订单');await user.page.getByTestId('order-'+o.id).click();assert.ok(await user.page.getByText('已送达',{exact:true}).count());await selectAdmin(o);await tab(rider,'我的');await rider.page.getByTestId('me-orders').click();
    for(const [a,name] of [[user,'user-delivered'],[rider,'rider-delivered'],[admin,'admin-delivered']])for(const width of [1440,390])await h.shot(a,name,width);
    const history=await call(rider,'GET','/rider/history');assert.ok(history.items.every(t=>!('address'in t)));const income=await call(rider,'GET','/rider/earnings');assert.equal(income.items.length,1);
   });
@@ -84,7 +86,7 @@ test('P06 LOCAL REAL: compiled entries → Go identity/API/worker → isolated P
   });
   await scenario('UI-01 / PAY-03 / TRADE-04','scheduled balance cancellation restores wallet/stock/slot once via UI',async()=>{
    const a=await h.actor('buyer3','user');const before=await call(a,'GET','/me/wallet');const productsBefore=await call(admin,'GET','/admin/products');const slotBefore=await call(admin,'GET','/admin/slots/later');
-   const o=await uiOrder(a,{mode:'SCHEDULED',method:'BALANCE'});assert.equal(o.status,'SCHEDULED');assert.equal(o.settlement_status,'BALANCE_PAID');
+   const o=await uiOrder(a,{mode:'SCHEDULED'});assert.equal(o.status,'SCHEDULED');assert.equal(o.settlement_status,'BALANCE_PAID');
    const response=a.page.waitForResponse(r=>r.url().endsWith('/'+o.id+'/cancel'));await a.page.getByTestId('cancel-order').click();const canceled=await response;assert.equal(canceled.status(),200);await call(a,'POST','/orders/'+o.id+'/cancel',JSON.parse(canceled.request().postData()),200,canceled.request().headers()['idempotency-key']);
    assert.equal((await call(a,'GET','/me/wallet')).balance_fen,before.balance_fen);const p=await call(admin,'GET','/admin/products');assert.equal(p.items[0].inventory.reserved,productsBefore.items[0].inventory.reserved);assert.equal((await call(admin,'GET','/admin/slots/later')).used,slotBefore.used);assert.equal((await h.control('snapshot')).wallet_refunds,1);
    await a.page.reload();await tab(a,'我的订单');await a.page.getByTestId('order-'+o.id).click();for(const w of [1440,390])await h.shot(a,'balance-refunded',w);
@@ -96,12 +98,12 @@ test('P06 LOCAL REAL: compiled entries → Go identity/API/worker → isolated P
    const a=await h.actor('buyer12','user'),o=await uiOrder(a);await adminAction('prepare',o);await adminAction('cancel',o);let p=(await call(admin,'GET','/admin/products')).items[0];const held=p.inventory.reserved;assert.ok(held>=1);await selectAdmin(o);const response=admin.page.waitForResponse(r=>r.url().endsWith('/'+o.id+'/restock'));await admin.page.getByTestId('restock').click();const r=await response;assert.equal(r.status(),200);const done=await r.json();assert.equal(done.stock_status,'RESTOCKED');p=(await call(admin,'GET','/admin/products')).items[0];assert.equal(p.inventory.reserved,held-1);await call(admin,'POST','/admin/orders/'+o.id+'/restock',JSON.parse(r.request().postData()),200,r.request().headers()['idempotency-key']);assert.equal((await call(admin,'GET','/admin/products')).items[0].inventory.reserved,p.inventory.reserved);for(const w of [1440,390])await h.shot(admin,'canceled-restocked',w);
   });
   await scenario('UI-02 / PAY-03 / PAY-05','insufficient balance preserves selection; WECHAT disabled both UI and API; balance capability off',async()=>{
-   const a=await h.actor('buyer4','user');await a.page.getByTestId('add-'+h.info.sku).click();await a.page.getByRole('button',{name:/^购物袋/}).click();await a.page.getByRole('radio',{name:'余额',exact:true}).check();await a.page.getByTestId('quote').click();await a.page.getByTestId('confirm-order').waitFor();await a.page.getByTestId('confirm-order').click();await a.page.getByRole('alert').filter({hasText:'INSUFFICIENT_BALANCE'}).waitFor();assert.ok(await a.page.getByRole('radio',{name:'余额',exact:true}).isChecked());assert.equal((await call(a,'GET','/orders')).items.length,0);
+   const a=await h.actor('buyer4','user');await a.page.getByTestId('add-'+h.info.sku).click();await a.page.getByTestId('start-checkout').click();await a.page.getByRole('radio',{name:'余额',exact:true}).check();await a.page.getByTestId('quote').click();await a.page.getByTestId('confirm-order').waitFor();await a.page.getByTestId('confirm-order').click();await a.page.getByRole('alert').filter({hasText:'INSUFFICIENT_BALANCE'}).waitFor();assert.ok(await a.page.getByRole('radio',{name:'余额',exact:true}).isChecked());assert.equal((await call(a,'GET','/orders')).items.length,0);
    assert.ok(await a.page.getByRole('radio',{name:'微信待接入',exact:true}).isDisabled());const wechat=await h.request(a,'POST','/checkout/quote',{lines:[{sku_id:h.info.sku,qty:1}],address_id:'a4',delivery_mode:'ASAP',payment_method:'WECHAT'});assert.equal(wechat.body.code,'PAYMENT_METHOD_DISABLED');for(const w of [1440,390])await h.shot(a,'insufficient-balance',w);
    await h.control('balance',{Enabled:false});await a.page.getByRole('button',{name:'刷新配送与支付信息',exact:true}).click();await a.page.waitForFunction(()=>document.querySelector('input[value="BALANCE"]')?.disabled);assert.ok(await a.page.getByRole('radio',{name:'余额',exact:true}).isDisabled());await h.control('balance',{Enabled:true});
   });
   await scenario('PAY-01 / RIDER-02','refused COD returns through actual services; no receipt or income',async()=>{
-   const a=await h.actor('buyer5','user');returned=await uiOrder(a);const task=await dispatch(returned);await rider.page.reload();await rider.page.getByTestId('claim-'+task.id).click();await rider.page.getByTestId('pickup').waitFor();await rider.page.getByTestId('pickup').click();await rider.page.getByTestId('return').waitFor();const before=await h.control('snapshot');
+   const a=await h.actor('buyer5','user');returned=await apiOrder(a);const task=await dispatch(returned);await rider.page.reload();await rider.page.getByTestId('claim-'+task.id).click();await rider.page.getByTestId('pickup').waitFor();await rider.page.getByTestId('pickup').click();await rider.page.getByTestId('return').waitFor();const before=await h.control('snapshot');
    const noCash=await h.request(rider,'POST','/rider/tasks/'+task.id+'/deliver',{cod_received:false});assert.equal(noCash.status,409);
    let response=rider.page.waitForResponse(r=>r.url().endsWith('/'+task.id+'/return'));await rider.page.getByTestId('return').click();assert.equal((await response).status(),200);await selectAdmin(returned);await admin.page.getByLabel('可售件数 · 手账燕麦饼干',{exact:true}).fill('1');response=admin.page.waitForResponse(r=>r.url().endsWith('/'+returned.id+'/return-inspect'));await admin.page.getByTestId('return-inspect').click();assert.equal((await response).status(),200);
    const o=await call(a,'GET','/orders/'+returned.id);assert.equal(o.status,'RETURNED');assert.equal(o.settlement_status,'VOID');const after=await h.control('snapshot');assert.equal(after.receipts,before.receipts);assert.equal(after.earnings,before.earnings);await selectAdmin(o);for(const w of [1440,390])await h.shot(admin,'return-inspected',w);
@@ -116,9 +118,9 @@ test('P06 LOCAL REAL: compiled entries → Go identity/API/worker → isolated P
    const task=await dispatch(o),r2=await h.actor('r2','rider');await call(r2,'PUT','/rider/availability',{available:true});await rider.page.reload();await rider.page.getByTestId('claim-'+task.id).waitFor();await call(r2,'POST','/rider/tasks/'+task.id+'/claim');await rider.page.getByTestId('claim-'+task.id).click();await rider.page.getByRole('alert').filter({hasText:'TASK_ALREADY_CLAIMED'}).waitFor();await rider.page.getByTestId('claim-'+task.id).waitFor({state:'detached'});await call(r2,'POST','/rider/tasks/'+task.id+'/pickup');await call(r2,'POST','/rider/tasks/'+task.id+'/deliver',{cod_received:true});
   });
   await scenario('UI-02 / TRADE-01 / SLOT-02','compiled user UI handles real repricing, full/closed slot, stock and stale order conflicts',async()=>{
-   const a=await h.actor('buyer9','user');await a.page.getByTestId('add-'+h.info.sku).click();await a.page.getByRole('button',{name:/^购物袋/}).click();
+   const a=await h.actor('buyer9','user');await a.page.getByTestId('add-'+h.info.sku).click();await a.page.getByTestId('start-checkout').click();
    async function quote(){await a.page.getByTestId('quote').click();await a.page.getByTestId('confirm-order').waitFor();}
-   async function reject(code){await a.page.getByTestId('confirm-order').click();await a.page.getByRole('alert').filter({hasText:code}).waitFor();assert.ok(await a.page.getByRole('radio',{name:'货到付款',exact:true}).isChecked());assert.equal(await a.page.getByLabel('配送方式',{exact:true}).inputValue(),'ASAP');assert.equal(await a.page.getByTestId('confirm-order').count(),0);assert.equal((await call(a,'GET','/orders')).items.length,0);for(const w of [1440,390])await h.shot(a,'conflict-'+code.toLowerCase(),w);}
+   async function reject(code){await a.page.getByTestId('confirm-order').click();await a.page.getByRole('alert').filter({hasText:code}).waitFor();assert.ok(await a.page.getByRole('radio',{name:'余额',exact:true}).isChecked());assert.equal(await a.page.getByLabel('配送方式',{exact:true}).inputValue(),'ASAP');assert.equal(await a.page.getByTestId('confirm-order').count(),0);assert.equal((await call(a,'GET','/orders')).items.length,0);for(const w of [1440,390])await h.shot(a,'conflict-'+code.toLowerCase(),w);}
    await quote();let p=(await call(admin,'GET','/admin/products')).items[0];const old=p.skus.map(s=>({...s}));await call(admin,'PATCH','/admin/products/'+p.id,{expected_version:p.version,skus:p.skus.map(s=>({...s,unit_price_fen:s.unit_price_fen+1}))});await reject('QUOTE_CHANGED');p=(await call(admin,'GET','/admin/products')).items[0];await call(admin,'PATCH','/admin/products/'+p.id,{expected_version:p.version,skus:old});
    await quote();let sl=await call(admin,'GET','/admin/slots/asap');await call(admin,'PUT','/admin/slots/asap',{expected_version:sl.version,capacity:sl.used,accepting:true});await reject('SLOT_FULL');sl=await call(admin,'GET','/admin/slots/asap');await call(admin,'PUT','/admin/slots/asap',{expected_version:sl.version,capacity:100,accepting:true});
    await quote();sl=await call(admin,'GET','/admin/slots/asap');await call(admin,'PUT','/admin/slots/asap',{expected_version:sl.version,capacity:100,accepting:false});await reject('SLOT_EXPIRED');sl=await call(admin,'GET','/admin/slots/asap');await call(admin,'PUT','/admin/slots/asap',{expected_version:sl.version,capacity:100,accepting:true});
@@ -126,7 +128,7 @@ test('P06 LOCAL REAL: compiled entries → Go identity/API/worker → isolated P
    const b=await h.actor('buyer10','user'),o=await uiOrder(b);await call(b,'POST','/orders/'+o.id+'/cancel',{reason_code:'OTHER_SESSION'});await b.page.getByTestId('cancel-order').click();await b.page.getByRole('alert').filter({hasText:'INVALID_STATE'}).waitFor();assert.equal((await call(b,'GET','/orders/'+o.id)).status,'CANCELED');
   });
   await scenario('SLOT-03 / PAY-01','scheduled COD stays out of hall until real due worker and operator dispatch',async()=>{
-   const a=await h.actor('buyer2','user');scheduled=await uiOrder(a,{mode:'SCHEDULED'});const before=await call(rider,'GET','/rider/tasks');assert.equal(before.items.length,0);assert.equal((await h.request(admin,'POST','/admin/orders/'+scheduled.id+'/dispatch')).status,409);
+   const a=await h.actor('buyer2','user');scheduled=await apiOrder(a,{mode:'SCHEDULED'});const before=await call(rider,'GET','/rider/tasks');assert.equal(before.items.length,0);assert.equal((await h.request(admin,'POST','/admin/orders/'+scheduled.id+'/dispatch')).status,409);
    assert.equal((await call(a,'GET','/orders/'+scheduled.id)).status,'SCHEDULED');const worker=await h.control('advance',{Minutes:45});assert.ok(worker.worker_processed>=1);assert.equal((await call(a,'GET','/orders/'+scheduled.id)).status,'PREPARING');assert.equal((await call(rider,'GET','/rider/tasks')).items.length,0);
    const task=await dispatch(scheduled);await uiDeliver(task);assert.equal((await call(a,'GET','/orders/'+scheduled.id)).status,'DELIVERED');await selectAdmin(scheduled);for(const w of [1440,390])await h.shot(admin,'scheduled-delivered',w);
    await h.control('advance',{Minutes:0});assert.equal((await h.control('snapshot')).earnings,3);
@@ -137,22 +139,22 @@ test('P06 LOCAL REAL: compiled entries → Go identity/API/worker → isolated P
    for(const w of [1440,390])await h.shot(a,'session-restored',w);
   });
   await scenario('UI-02 / TRADE-02 [NETWORK FAULT INJECTION]','committed response lost: query then same-body same-key retry creates one order',async()=>{
-   const a=await h.actor('buyer8','user');await a.page.getByTestId('add-'+h.info.sku).click();await a.page.getByRole('button',{name:/^购物袋/}).click();await a.page.getByTestId('quote').click();await a.page.getByTestId('confirm-order').waitFor();
+   const a=await h.actor('buyer8','user');await a.page.getByTestId('add-'+h.info.sku).click();await a.page.getByTestId('start-checkout').click();await a.page.getByTestId('quote').click();await a.page.getByTestId('confirm-order').waitFor();
    const writes=[];const observe=req=>{if(req.url().endsWith('/api/v1/orders')&&req.method()==='POST')writes.push({key:req.headers()['idempotency-key'],body:req.postData()});};a.page.on('request',observe);h.dropNextOrderResponse();
    await a.page.getByTestId('confirm-order').click();await a.page.getByTestId('check-uncertain').waitFor();assert.equal((await call(a,'GET','/orders')).items.length,1);assert.ok(await a.page.getByTestId('retry-uncertain').isDisabled());await a.page.getByTestId('check-uncertain').click();await a.page.getByTestId('retry-uncertain').click();await a.page.getByTestId('order-detail').waitFor();assert.equal(writes.length,2);assert.deepEqual(writes[0],writes[1]);assert.equal((await call(a,'GET','/orders')).items.length,1);a.page.off('request',observe);
    await call(a,'POST','/orders/'+(await call(a,'GET','/orders')).items[0].id+'/cancel',{reason_code:'CUSTOMER_REQUEST'});
   });
   await scenario('UI-02 [NETWORK FAULT INJECTION]','offline read shows recovery and preserves shopping choice',async()=>{
-   const a=await h.actor('buyer9','user');await a.page.getByTestId('add-'+h.info.sku).click();await a.context.setOffline(true);await a.page.getByRole('button',{name:'刷新商品',exact:true}).click();await a.page.getByRole('alert').waitFor();await a.context.setOffline(false);await a.page.getByRole('button',{name:'刷新商品',exact:true}).click();await a.page.getByRole('button',{name:/^购物袋/}).click();assert.ok(await a.page.getByText('手账燕麦饼干 · 单袋',{exact:true}).count());assert.ok(await a.page.getByRole('radio',{name:'货到付款',exact:true}).isChecked());for(const w of [1440,390])await h.shot(a,'offline-recovered',w);
+   const a=await h.actor('buyer9','user');await a.page.getByTestId('add-'+h.info.sku).click();await a.context.setOffline(true);await a.page.getByRole('button',{name:'刷新商品',exact:true}).click();await a.page.getByRole('alert').waitFor();await a.context.setOffline(false);await a.page.getByRole('button',{name:'刷新商品',exact:true}).click();await a.page.getByTestId('start-checkout').click();assert.ok(await a.page.getByText('手账燕麦饼干 · 单袋',{exact:true}).count());assert.ok(await a.page.getByRole('radio',{name:'余额',exact:true}).isChecked());for(const w of [1440,390])await h.shot(a,'offline-recovered',w);
   });
-  await scenario('ORDER-BATCH','merchant limits, mixed claims, payment badges and paid-only batch delivery',async()=>{
+  await scenario('ORDER-BATCH','merchant limits, payment badges, prepaid batches and exclusive COD claims',async()=>{
    const buyer=await h.actor('buyer13','user');
    const first=[
     await apiOrder(buyer,{method:'COD'}),
     await apiOrder(buyer,{method:'BALANCE'}),
     await apiOrder(buyer,{method:'BALANCE'}),
    ];
-   const extra=await apiOrder(buyer,{method:'COD'});
+   const extra=await apiOrder(buyer,{method:'BALANCE'});
    await tab(admin,'接单设置');
    await admin.page.getByLabel('商家每次最多接单').fill('3');
    await admin.page.getByLabel('每位骑手手上最多订单').fill('3');
@@ -175,14 +177,13 @@ test('P06 LOCAL REAL: compiled entries → Go identity/API/worker → isolated P
    await merchantBatch('accept',[extra]);
    await merchantBatch('ready',[extra]);
    const {items:allTasks}=await call(rider,'GET','/rider/tasks');
-   const extraTask=allTasks.find(t=>!initialTasks.some(initial=>initial.id===t.id));
-   assert.ok(extraTask);
+   assert.equal(allTasks.length,4);
    await rider.page.reload();
    await rider.page.getByTestId('go-online').click();
    const riderCard=t=>rider.page.getByTestId('rider-task-'+t.id);
    const cod=initialTasks.find(t=>t.payment_method==='COD');
-   const paid=initialTasks.filter(t=>t.payment_method==='BALANCE');
-   assert.equal(paid.length,2);
+   const paid=allTasks.filter(t=>t.payment_method==='BALANCE');
+   assert.equal(paid.length,3);
    await riderCard(cod).getByText('货到付款',{exact:true}).waitFor();
    await riderCard(paid[0]).getByText('用户已付款',{exact:true}).waitFor();
    assert.notEqual(await riderCard(cod).evaluate(e=>getComputedStyle(e).backgroundColor),
@@ -190,30 +191,34 @@ test('P06 LOCAL REAL: compiled entries → Go identity/API/worker → isolated P
    await rider.page.getByLabel('付款方式').selectOption('COD');
    assert.equal(await riderCard(paid[0]).count(),0);
    await rider.page.getByLabel('付款方式').selectOption('ALL');
-   for(const task of initialTasks)await riderCard(task).getByRole('checkbox',{name:'选择接单'}).check();
-   assert.ok(await riderCard(extraTask).getByRole('checkbox',{name:'选择接单'}).isDisabled());
+   assert.equal(await riderCard(cod).getByRole('checkbox',{name:'选择接单'}).count(),0);
+   for(const task of paid)await riderCard(task).getByRole('checkbox',{name:'选择接单'}).check();
    for(const width of [1440,390])await h.shot(rider,'batch-rider-hall',width);
    await rider.page.getByTestId('rider-batch-claim').click();
    await rider.page.getByRole('status').filter({hasText:'已接单 3 单'}).waitFor();
-   assert.match(await rider.page.getByTestId('rider-capacity').innerText(),/还可接 0 单/);
-   for(const task of initialTasks){
+   assert.match(await rider.page.getByTestId('rider-capacity').innerText(),/手上 3\/3/);
+   await tab(rider,'任务大厅');
+   assert.ok(await rider.page.getByTestId('claim-'+cod.id).isDisabled());
+   await tab(rider,'配送中');
+   for(const task of paid){
     await rider.page.getByTestId('task-'+task.id).click();
     await rider.page.getByTestId('pickup').click();
     await riderCard(task).getByText('配送中',{exact:true}).waitFor();
    }
-   assert.equal(await riderCard(cod).getByRole('checkbox',{name:'选择送达'}).count(),0);
    for(const task of paid)await riderCard(task).getByRole('checkbox',{name:'选择送达'}).check();
    await rider.page.getByTestId('rider-batch-deliver').click();
-   await rider.page.getByRole('status').filter({hasText:'已送达 2 单'}).waitFor();
-   assert.match(await rider.page.getByTestId('rider-capacity').innerText(),/还可接 2 单/);
-   await rider.page.getByTestId('task-'+cod.id).click();
+   await rider.page.getByRole('status').filter({hasText:'已送达 3 单'}).waitFor();
+   assert.match(await rider.page.getByTestId('rider-capacity').innerText(),/手上 0\/3/);
+   await tab(rider,'任务大厅');
+   await rider.page.getByTestId('claim-'+cod.id).click();
+   await rider.page.getByTestId('pickup').click();
+   assert.equal(await riderCard(cod).getByRole('checkbox',{name:'选择送达'}).count(),0);
    await rider.page.getByLabel('已全额收到货到付款').waitFor();
    assert.ok(await rider.page.getByTestId('deliver').isDisabled());
    await rider.page.getByLabel('已全额收到货到付款').check();
    await rider.page.getByTestId('deliver').click();
    await rider.page.getByRole('status').filter({hasText:'服务器已确认：送达'}).waitFor();
-   await tab(rider,'站点大厅');
-   assert.ok(await rider.page.getByTestId('claim-'+extraTask.id).isEnabled());
+   assert.match(await rider.page.getByTestId('rider-capacity').innerText(),/手上 0\/3/);
   });
  } finally {await writeFile(resolve(h.evidence,'matrix.json'),JSON.stringify(evidence,null,2));await h.close();}
 });

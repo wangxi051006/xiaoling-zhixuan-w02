@@ -18,6 +18,7 @@ const (
 	UserEntry       Entry = "user"
 	RiderEntry      Entry = "rider"
 	AdminEntry      Entry = "admin"
+	MerchantEntry   Entry = "merchant"
 	recentMFAWindow       = 15 * time.Minute
 )
 
@@ -28,25 +29,32 @@ type EntryPolicy struct {
 	local   bool
 }
 
-func NewEntryPolicy(user, rider, admin string) (*EntryPolicy, error) {
-	return newEntryPolicy(user, rider, admin, false)
+func NewEntryPolicy(user, rider, admin string, merchant ...string) (*EntryPolicy, error) {
+	return newEntryPolicy(user, rider, admin, false, merchant...)
 }
 
 // NewLocalEntryPolicy keeps entry hosts distinct without requiring local TLS.
-func NewLocalEntryPolicy(user, rider, admin string) (*EntryPolicy, error) {
-	return newEntryPolicy(user, rider, admin, true)
+func NewLocalEntryPolicy(user, rider, admin string, merchant ...string) (*EntryPolicy, error) {
+	return newEntryPolicy(user, rider, admin, true, merchant...)
 }
 
-func newEntryPolicy(user, rider, admin string, local bool) (*EntryPolicy, error) {
-	policy := &EntryPolicy{origins: make(map[Entry]entryOrigin, 3), local: local}
-	hosts := make(map[string]bool, 3)
-	for entry, raw := range map[Entry]string{UserEntry: user, RiderEntry: rider, AdminEntry: admin} {
+func newEntryPolicy(user, rider, admin string, local bool, merchant ...string) (*EntryPolicy, error) {
+	if len(merchant) > 1 {
+		return nil, errors.New("only one merchant origin is supported")
+	}
+	entries := map[Entry]string{UserEntry: user, RiderEntry: rider, AdminEntry: admin}
+	if len(merchant) == 1 && merchant[0] != "" {
+		entries[MerchantEntry] = merchant[0]
+	}
+	policy := &EntryPolicy{origins: make(map[Entry]entryOrigin, len(entries)), local: local}
+	hosts := make(map[string]bool, len(entries))
+	for entry, raw := range entries {
 		u, err := url.Parse(raw)
 		if err != nil || (u.Scheme != "https" && !(local && u.Scheme == "http")) || u.Hostname() == "" || u.User != nil || u.Path != "" || u.RawQuery != "" || u.ForceQuery || u.Fragment != "" {
 			return nil, errors.New("each entry requires a distinct canonical HTTPS origin")
 		}
 		if local && u.Hostname() != string(entry)+".localhost" {
-			return nil, errors.New("test authentication requires user.localhost, rider.localhost and admin.localhost")
+			return nil, errors.New("test authentication requires the corresponding entry.localhost hosts")
 		}
 		host := strings.ToLower(u.Host)
 		if raw != u.Scheme+"://"+host || strings.HasSuffix(u.Hostname(), ".") || (u.Scheme == "https" && u.Port() == "443") || (u.Scheme == "http" && u.Port() == "80") {
@@ -83,6 +91,8 @@ func roleForEntry(entry Entry, role contract.Role) bool {
 		return role == contract.RoleCustomer
 	case RiderEntry:
 		return role == contract.RoleRider
+	case MerchantEntry:
+		return role == contract.RoleMerchant
 	case AdminEntry:
 		return role == contract.RoleOperator || role == contract.RoleFinance || role == contract.RoleSecurityAdmin
 	default:

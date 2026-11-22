@@ -51,6 +51,7 @@ func (h *HTTP) Register(mux *http.ServeMux) {
 	mux.HandleFunc("POST /api/v1/admin/cod/batches", finance(h.createBatch, true))
 	mux.HandleFunc("POST /api/v1/admin/cod/batches/{id}/verify", finance(h.verifyBatch, true))
 	mux.HandleFunc("GET /api/v1/admin/cod/merchant-settlements", finance(h.merchantSettlements, false))
+	mux.HandleFunc("GET /api/v1/merchant/settlements", h.require(h.merchantSettlements, identity.MerchantEntry, false, contract.RoleMerchant))
 	mux.HandleFunc("POST /api/v1/admin/cod/merchant-settlements/{id}/record-payout", finance(h.recordMerchantPayout, true))
 	mux.HandleFunc("GET /api/v1/admin/refunds", h.require(h.refunds, identity.AdminEntry, false, contract.RoleOperator, contract.RoleFinance))
 	mux.HandleFunc("POST /api/v1/admin/refunds/{id}/approve", finance(h.approve, true))
@@ -88,7 +89,7 @@ func writeSettlementError(w http.ResponseWriter, r *http.Request, err error) {
 		status, code = 413, "BODY_TOO_LARGE"
 	case errors.Is(err, ErrInvalid):
 		status, code = 400, "BAD_REQUEST"
-	case errors.Is(err, ErrNotFound):
+	case errors.Is(err, ErrNotFound), errors.Is(err, identity.ErrObjectNotFound):
 		status, code = 404, "NOT_FOUND"
 	case errors.Is(err, ErrInvalidState):
 		status, code = 409, "INVALID_STATE"

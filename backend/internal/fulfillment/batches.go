@@ -30,10 +30,11 @@ func validateBatch(ids []string) error {
 	return nil
 }
 
-func lockBatchOrders(ctx context.Context, tx pgx.Tx, station string, ids []string) ([]string, error) {
+func lockBatchOrders(ctx context.Context, tx pgx.Tx, station string, ids []string, merchantID string) ([]string, error) {
 	// Every batch acquires order locks in the same order, including batches
 	// started by different roles or submitted with different selection orders.
-	rows, err := tx.Query(ctx, `SELECT id FROM orders WHERE station_id=$1 AND id=ANY($2) ORDER BY id FOR UPDATE`, station, ids)
+	rows, err := tx.Query(ctx, `SELECT id FROM orders WHERE station_id=$1 AND id=ANY($2)
+		AND ($3='' OR merchant_id=$3) ORDER BY id FOR UPDATE`, station, ids, merchantID)
 	if err != nil {
 		return nil, err
 	}
@@ -60,7 +61,15 @@ func (s *Service) merchantBatch(ctx context.Context, tx pgx.Tx, actor identity.S
 			return ErrOrderLimit
 		}
 	}
-	locked, err := lockBatchOrders(ctx, tx, actor.StationID, ids)
+	merchantID := ""
+	if actor.Entry == identity.MerchantEntry {
+		var err error
+		merchantID, err = identity.MerchantID(ctx, tx, actor)
+		if err != nil {
+			return err
+		}
+	}
+	locked, err := lockBatchOrders(ctx, tx, actor.StationID, ids, merchantID)
 	if err != nil {
 		return err
 	}
@@ -107,7 +116,7 @@ func (s *Service) riderBatch(ctx context.Context, tx pgx.Tx, actor identity.Sess
 		orderIDs = append(orderIDs, task.OrderID)
 		taskIDs[task.OrderID] = taskID
 	}
-	locked, err := lockBatchOrders(ctx, tx, actor.StationID, orderIDs)
+	locked, err := lockBatchOrders(ctx, tx, actor.StationID, orderIDs, "")
 	if err != nil {
 		return err
 	}

@@ -1,0 +1,88 @@
+:root {
+  --xl-color-brand: #35664f;
+  --xl-color-brand-pressed: #284f3d;
+  --xl-color-brand-soft: #e6eee3;
+  --xl-color-on-brand: #ffffff;
+  --xl-color-accent: #a63c25;
+
+  --xl-color-bg-surface: #fffefc;
+  --xl-color-bg-page: #f6f4ef;
+  --xl-color-bg-muted: #eeebe4;
+  --xl-color-text-primary: #2e2a24;
+  --xl-color-text-secondary: #554d44;
+  --xl-color-text-muted: #665d53;
+  --xl-color-divider: #e5e1d9;
+  --xl-color-control-border: #8a7d6e;
+  --xl-color-focus: #284f3d;
+
+  --xl-color-warning: #784700;
+  --xl-color-warning-bg: #fff3d4;
+  --xl-color-danger: #9a3425;
+  --xl-color-danger-bg: #fff0eb;
+
+  --xl-font-family: 'Inter', 'PingFang SC', 'Microsoft YaHei', system-ui, sans-serif;
+  --xl-font-size-title: 24px;
+  --xl-line-height-title: 32px;
+  --xl-font-size-card-title: 16px;
+  --xl-line-height-card-title: 24px;
+  --xl-font-size-body: 14px;
+  --xl-line-height-body: 20px;
+  --xl-font-size-caption: 12px;
+  --xl-line-height-caption: 16px;
+  --xl-font-weight-regular: 400;
+  --xl-font-weight-semibold: 600;
+  --xl-font-weight-bold: 700;
+
+  --xl-space-4: 4px;
+  --xl-space-8: 8px;
+  --xl-space-12: 12px;
+  --xl-space-16: 16px;
+  --xl-space-24: 24px;
+  --xl-space-32: 32px;
+  --xl-radius-control: 8px;
+  --xl-radius-card: 8px;
+  --xl-radius-sheet: 16px;
+  --xl-radius-chip: 999px;
+  --xl-shadow-card: 0 1px 2px rgba(46, 42, 36, 0.06);
+
+  --xl-size-hit-target: 44px;
+  --xl-size-button-min-height: var(--xl-size-hit-target);
+  --xl-size-input-min-height: var(--xl-size-hit-target);
+  --xl-size-bottom-bar: 64px;
+  --xl-safe-area-bottom: env(safe-area-inset-bottom, 0px);
+  --xl-size-bottom-bar-total: calc(var(--xl-size-bottom-bar) + var(--xl-safe-area-bottom));
+  --xl-space-bottom-content: calc(var(--xl-size-bottom-bar-total) + var(--xl-space-16));
+
+  --xl-motion-feedback: 120ms;
+  --xl-motion-ease: ease-out;
+}
+
+:root[data-xl-theme='operations'],
+.app.admin,
+.app.rider {
+  --xl-color-brand: #244f80;
+  --xl-color-brand-pressed: #193b63;
+  --xl-color-brand-soft: #e6eef9;
+  --xl-color-accent: #875400;
+
+  --xl-color-bg-surface: #ffffff;
+  --xl-color-bg-page: #f1f4f8;
+  --xl-color-bg-muted: #e5ebf2;
+  --xl-color-text-primary: #182433;
+  --xl-color-text-secondary: #384a5f;
+  --xl-color-text-muted: #536376;
+  --xl-color-divider: #cdd7e3;
+  --xl-color-control-border: #738398;
+  --xl-color-focus: var(--xl-color-brand);
+
+  --xl-color-warning: var(--xl-color-accent);
+  --xl-color-warning-bg: #fff3d6;
+  --xl-color-success: #24553e;
+  --xl-color-success-bg: #e8f4ed;
+
+  --xl-radius-control: 6px;
+  --xl-radius-card: 6px;
+  --xl-radius-sheet: 12px;
+  --xl-radius-chip: 4px;
+  --xl-shadow-card: 0 1px 2px rgba(24, 36, 51, 0.08);
+}

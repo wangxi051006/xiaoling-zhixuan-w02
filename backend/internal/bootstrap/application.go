@@ -21,6 +21,7 @@ type ApplicationOptions struct {
 	Pool                                 *pgxpool.Pool
 	Clock                                contract.Clock
 	UserOrigin, RiderOrigin, AdminOrigin string
+	MerchantOrigin                       string
 	Payments                             settlement.PaymentPolicy
 	OTP                                  *identity.OTP
 	Emails                               *identity.EmailCodes
@@ -56,7 +57,7 @@ func newApplication(ctx context.Context, o ApplicationOptions, localTest bool) (
 		}
 		entryPolicy = identity.NewLocalEntryPolicy
 	}
-	policy, err := entryPolicy(o.UserOrigin, o.RiderOrigin, o.AdminOrigin)
+	policy, err := entryPolicy(o.UserOrigin, o.RiderOrigin, o.AdminOrigin, o.MerchantOrigin)
 	if err != nil {
 		return nil, err
 	}

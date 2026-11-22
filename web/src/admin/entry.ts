@@ -8,6 +8,7 @@ import { session, localTestLogin, sessionKey, shell, money, date, today, id, btn
 // difference_fen is the stored ledger direction (expected - actual); the label is
 // shared with the tests so the page can never subtract the two sides itself.
 import { codDifference } from '../shared/cod.ts';
+import '../user/style.css';
 
 type StockRow={inventory_id:string;units:number};
 type ProductForm = Omit<ProductInput, 'skus'> & {

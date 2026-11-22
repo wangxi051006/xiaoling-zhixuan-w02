@@ -1,0 +1,83 @@
+def origin = providers.environmentVariable(originVariable).orNull
+def isHttpsOrigin = origin != null && origin ==~ /https:\/\/[a-z0-9-]+(\.[a-z0-9-]+)+/
+// 仅用于本地联调：模拟器/真机通过 10.0.2.2、127.0.0.1 或 localhost 访问开发服务器。
+// 必须同时设置 ALLOW_LOCAL_ORIGIN=1，且 release 变体一律拒绝（见下方校验）。
+def isLocalOrigin = origin != null && origin ==~ /http:\/\/((10\.0\.2\.2|127\.0\.0\.1)|[a-z0-9-]+\.localhost):\d{1,5}(\/[A-Za-z0-9._~\/-]*)?/
+def localOptIn = System.getenv('ALLOW_LOCAL_ORIGIN') == '1'
+if (!isHttpsOrigin && !isLocalOrigin) {
+    throw new GradleException("${originVariable} must be the deployed HTTPS origin without a trailing slash (got: ${origin})")
+}
+if (isLocalOrigin && !localOptIn) {
+    throw new GradleException("Local HTTP ${originVariable} (${origin}) requires ALLOW_LOCAL_ORIGIN=1 and is limited to debug builds")
+}
+if (System.getenv('MERCHANT_ORIGIN') == System.getenv('RIDER_ORIGIN')) {
+    throw new GradleException('Merchant and rider must use separate origins')
+}
+
+def assetStatements = groovy.json.JsonOutput.toJson([
+    [relation: ['delegate_permission/common.handle_all_urls'], target: [namespace: 'web', site: origin]]
+])
+def originUri = new java.net.URI(origin)
+def originHost = originUri.host
+// 无路径时补结尾斜杠；带路径（本地 dev 入口，如 /rider.html）时原样使用
+def startUrl = originUri.path ? origin : origin + '/'
+
+android {
+    namespace = clientId
+    compileSdk = 36
+
+    // 版本号可用 -PappVersionCode / -PappVersionName 覆盖，便于发版脚本注入
+    def appVersionCode = (findProperty('appVersionCode') ?: '1').toInteger()
+    def appVersionName = (findProperty('appVersionName') ?: '1.0.0').toString()
+
+    defaultConfig {
+        applicationId = clientId
+        minSdk = 24
+        targetSdk = 36
+        versionCode = appVersionCode
+        versionName = appVersionName
+        manifestPlaceholders = [
+            clientName: clientName,
+            startUrl: startUrl,
+            startHost: originHost,
+        ]
+        resValue 'string', 'asset_statements', assetStatements.replace('"', '\\"')
+    }
+
+    // 正式签名只从环境变量读取：keystore 与口令都不进仓库；缺失时 release 构建保持未签名
+    def keystorePath = providers.environmentVariable('RIDER_KEYSTORE').orNull
+    def hasReleaseKey = keystorePath != null && file(keystorePath).exists()
+
+    signingConfigs {
+        if (hasReleaseKey) {
+            release {
+                storeFile file(keystorePath)
+                storePassword providers.environmentVariable('RIDER_KEYSTORE_PASSWORD').orNull
+                keyAlias providers.environmentVariable('RIDER_KEY_ALIAS').orNull
+                keyPassword providers.environmentVariable('RIDER_KEY_PASSWORD').orNull
+            }
+        }
+    }
+
+    buildTypes {
+        release {
+            minifyEnabled = false
+            shrinkResources = false
+            if (hasReleaseKey) {
+                signingConfig = signingConfigs.release
+            }
+        }
+    }
+
+    sourceSets.main.manifest.srcFile rootProject.file('AndroidManifest.xml')
+}
+
+dependencies {
+    implementation 'com.google.androidbrowserhelper:androidbrowserhelper:2.7.4'
+}
+
+// release 一律拒绝 http origin：只有当本次构建确实在打 release 变体时才失败，
+// 以免仅同步/打 debug 包时因为这条规则而配置失败。
+if (!isHttpsOrigin && gradle.startParameter.taskNames.join(' ').toLowerCase().contains('release')) {
+    throw new GradleException("Release builds must use an HTTPS ${originVariable}; got ${origin}")
+}
