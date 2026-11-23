@@ -10,6 +10,7 @@ import type {
 } from '../shared/generated.ts';
 import { moneyAmount } from '../shared/money.ts';
 import { date, field, localTestLogin, session, sessionKey, stateText, today, id } from '../user/ui.ts';
+import { native } from '../shared/native.ts';
 import './app.css';
 
 // 任务大厅、待取货、配送中三段共用一次 /rider/tasks 读取结果。
@@ -50,6 +51,11 @@ export const RiderApp = { setup() {
  const todayOrders = computed(() => earnings.value.length);
  const todayIncome = computed(() => earnings.value.reduce((sum, item) => sum + item.amount_fen, 0));
  const myRank = computed(() => leaderboard.value?.entries?.find(entry => entry.me)?.rank);
+
+ // 原生容器里：把 csrf 交给原生，供定位上报与离线重放使用；浏览器里是空操作。
+ watch(() => s.me.value?.csrf_token, token => {
+  if (token) native.setAuth(token);
+ }, { immediate: true });
 
  watch(() => sessionKey(s.me.value), (value, prior) => {
   if (value === prior) return;
@@ -200,6 +206,8 @@ export const RiderApp = { setup() {
    available.value = v.available;
    statusOpen.value = false;
    s.notice.value = v.available ? '服务器已确认上线' : '服务器已确认下线';
+   // 上线才开定位前台服务，下线立刻停：省电，也让轨迹只覆盖在岗时段
+   if (v.available) native.startTracking(); else native.stopTracking();
    await refresh();
   }, 'PUT');
   schedule();

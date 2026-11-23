@@ -10,6 +10,7 @@ import type {
   MerchantSettlement, MerchantSettlementList, OrderBatchResult, ProductInput, ProductUpdate,
 } from '../shared/generated.ts';
 import { moneyAmount } from '../shared/money.ts';
+import { native } from '../shared/native.ts';
 import { btn, date, field, form, localTestLogin, session, sessionKey, today } from '../user/ui.ts';
 import './app.css';
 
@@ -85,6 +86,27 @@ createApp({
     const orders = ref<MerchantOrder[]>([]);
     const products = ref<AdminProduct[]>([]);
     const payouts = ref<MerchantSettlement[]>([]);
+
+    // 原生容器：扫码回调 + 小票打印。浏览器里退回原来的 window.print()。
+    if (native.available) {
+      window.addEventListener('native:scan', event => {
+        const code = (event as CustomEvent<{ code?: string }>).detail?.code ?? '';
+        auth.notice.value = code ? '扫到 ' + code + '，核对后请点出餐' : '扫码已取消';
+      });
+    }
+
+    function printSlip() {
+      if (!native.available) { window.print(); return; }
+      const stamp = new Intl.DateTimeFormat('zh-CN', {
+        timeZone: 'Asia/Shanghai', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', hour12: false,
+      }).format(new Date());
+      const pending = orders.value.filter(order => order.status === 'SCHEDULED' || order.status === 'PREPARING').length;
+      const active = orders.value.filter(order => order.status !== 'CANCELED' && order.status !== 'RETURNED').length;
+      const text = ['校零智选', stamp, '待处理 ' + pending + ' 单 · 在途 ' + active + ' 单',
+        '打印机 ' + (native.printerName() || '未选择（请在系统设置配对打印机）')].join('\n');
+      const printed = native.printReceipt(text);
+      auth.notice.value = printed ? '已发送到打印机' : '打印机不可用，小票已进入补打队列';
+    }
 
     const auth = session(['MERCHANT'], refresh);
     const testLogin = localTestLogin('merchant', auth);
@@ -654,8 +676,8 @@ createApp({
               }, '历史订单'),
             ]),
             h('div', { class: 'm-top-actions' }, [
-              iconButton(ScanLine, '扫码', () => { auth.notice.value = '扫码点单暂未开通，请在平台收银端扫码核销。'; }),
-              iconButton(Printer, '打印当前页面', () => window.print()),
+              iconButton(ScanLine, '扫码', () => { if (native.available) native.scan('order'); else auth.notice.value = '当前环境不支持扫码，请在收银端核销。'; }),
+              iconButton(Printer, '打印小票', () => printSlip()),
               iconButton(Settings2, '设置', () => switchTab('me')),
             ]),
           ]),
@@ -1081,7 +1103,7 @@ createApp({
         h('div', { class: 'm-menu' }, [
           menuRow(ShieldCheck, '员工登录 / MFA', 'blue', () => window.location.assign('/api/v1/auth/staff/start')),
           menuRow(RefreshCw, '恢复会话', 'green', () => auth.recover(true), 'recover-session'),
-          menuRow(Printer, '打印本页', 'violet', () => window.print()),
+          menuRow(Printer, '打印小票', 'violet', () => printSlip()),
           menuRow(LogOut, '退出登录', 'red', logout, 'me-logout'),
         ]),
         h('div', { class: 'm-panel m-info' }, [

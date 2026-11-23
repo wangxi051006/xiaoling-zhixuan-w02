@@ -112,7 +112,7 @@
 			file_server
 		}
 		@android_links {
-			expression `"{args[1]}" in ["merchant", "rider"]`
+			expression `"{args[1]}" in ["merchant", "rider", "user"]`
 			path /.well-known/assetlinks.json
 		}
 		handle @android_links {

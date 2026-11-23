@@ -1,16 +1,39 @@
-def origin = providers.environmentVariable(originVariable).orNull
-def isHttpsOrigin = origin != null && origin ==~ /https:\/\/[a-z0-9-]+(\.[a-z0-9-]+)+/
+// origin 的解析顺序：-P/gradle.properties → 环境变量 → local.properties（本机、不入库）。
+// Android Studio 的 Gradle 进程不继承终端 export 的变量，写进 local.properties 才能让 IDE 同步通过。
+def localProps = new Properties()
+def localPropsFile = rootProject.file('local.properties')
+if (localPropsFile.exists()) {
+    localPropsFile.withInputStream { localProps.load(it) }
+}
+def configValue = { String name ->
+    def candidate = [project.findProperty(name), project.providers.environmentVariable(name).orNull, localProps.getProperty(name)]
+            .find { it != null && !it.toString().trim().isEmpty() }
+    candidate == null ? null : candidate.toString().trim()
+}
+
+// 只解析模型（IDE 同步）时没有任何构建任务：允许暂时缺省，用占位 origin 让工程配置完成。
+def syncOnly = gradle.startParameter.taskNames.isEmpty()
+def origin = configValue(originVariable)
+if (origin == null && syncOnly) {
+    origin = "https://${clientId}.invalid"
+    logger.lifecycle("${originVariable} 未配置：本次只是 Gradle 同步，使用占位 origin ${origin}；构建 APK 前请写入 local.properties")
+}
+if (origin == null) {
+    throw new GradleException("${originVariable} is required to build: put it in local.properties, export it as an environment variable, or pass -P${originVariable}=https://…")
+}
+def isHttpsOrigin = origin ==~ /https:\/\/[a-z0-9-]+(\.[a-z0-9-]+)+/
 // 仅用于本地联调：模拟器/真机通过 10.0.2.2、127.0.0.1 或 localhost 访问开发服务器。
 // 必须同时设置 ALLOW_LOCAL_ORIGIN=1，且 release 变体一律拒绝（见下方校验）。
 def isLocalOrigin = origin != null && origin ==~ /http:\/\/((10\.0\.2\.2|127\.0\.0\.1)|[a-z0-9-]+\.localhost):\d{1,5}(\/[A-Za-z0-9._~\/-]*)?/
-def localOptIn = System.getenv('ALLOW_LOCAL_ORIGIN') == '1'
+def localOptIn = configValue('ALLOW_LOCAL_ORIGIN') == '1'
 if (!isHttpsOrigin && !isLocalOrigin) {
     throw new GradleException("${originVariable} must be the deployed HTTPS origin without a trailing slash (got: ${origin})")
 }
 if (isLocalOrigin && !localOptIn) {
     throw new GradleException("Local HTTP ${originVariable} (${origin}) requires ALLOW_LOCAL_ORIGIN=1 and is limited to debug builds")
 }
-if (System.getenv('MERCHANT_ORIGIN') == System.getenv('RIDER_ORIGIN')) {
+def otherOrigin = configValue(originVariable == 'MERCHANT_ORIGIN' ? 'RIDER_ORIGIN' : 'MERCHANT_ORIGIN')
+if (otherOrigin != null && otherOrigin == origin) {
     throw new GradleException('Merchant and rider must use separate origins')
 }
 
@@ -26,6 +49,17 @@ android {
     namespace = clientId
     compileSdk = 36
 
+    compileOptions {
+        sourceCompatibility = JavaVersion.VERSION_17
+        targetCompatibility = JavaVersion.VERSION_17
+    }
+
+    // Kotlin 的 jvmTarget 必须与 javac 的 target 一致，否则 compileDebugKotlin 会以
+    // "Inconsistent JVM-target compatibility detected" 直接失败。
+    kotlinOptions {
+        jvmTarget = '17'
+    }
+
     // 版本号可用 -PappVersionCode / -PappVersionName 覆盖，便于发版脚本注入
     def appVersionCode = (findProperty('appVersionCode') ?: '1').toInteger()
     def appVersionName = (findProperty('appVersionName') ?: '1.0.0').toString()
@@ -40,8 +74,18 @@ android {
             clientName: clientName,
             startUrl: startUrl,
             startHost: originHost,
+            usesCleartext: isLocalOrigin ? 'true' : 'false',
         ]
         resValue 'string', 'asset_statements', assetStatements.replace('"', '\\"')
+
+        // 原生壳需要的编译期常量：页面地址、host（深链校验 + 站内判断）、是否允许明文（仅本地联调）
+        buildConfigField 'String', 'START_URL', '"' + startUrl + '"'
+        buildConfigField 'String', 'START_HOST', '"' + originHost + '"'
+        buildConfigField 'boolean', 'ALLOW_CLEARTEXT', isLocalOrigin ? 'true' : 'false'
+    }
+
+    buildFeatures {
+        buildConfig = true
     }
 
     // 正式签名只从环境变量读取：keystore 与口令都不进仓库；缺失时 release 构建保持未签名
@@ -72,9 +116,7 @@ android {
     sourceSets.main.manifest.srcFile rootProject.file('AndroidManifest.xml')
 }
 
-dependencies {
-    implementation 'com.google.androidbrowserhelper:androidbrowserhelper:2.7.4'
-}
+// 原生壳的依赖在 rider/build.gradle 里声明（TWA 的 androidbrowserhelper 已移除）
 
 // release 一律拒绝 http origin：只有当本次构建确实在打 release 变体时才失败，
 // 以免仅同步/打 debug 包时因为这条规则而配置失败。

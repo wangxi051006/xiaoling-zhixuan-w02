@@ -1,54 +1,45 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!--
-    Trusted Web Activity 壳。所有与具体产品相关的值（包名、应用名、站点域名）都由
-    merchant/build.gradle + client.gradle 通过 manifestPlaceholders 注入。
+    校零智选商家 · 原生容器壳。
+    页面在 web/src/merchant，打印走 ESC/POS 蓝牙、扫码走 ZXing，提醒走系统通知。
 -->
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
 
-    <!-- Android 11+ 需要显式声明才能查询/绑定 Chrome 的 Custom Tabs 服务 -->
-    <queries>
-        <package android:name="com.android.chrome" />
-        <intent>
-            <action android:name="android.support.customtabs.action.CustomTabsService" />
-        </intent>
-    </queries>
+    <uses-permission android:name="android.permission.INTERNET" />
+    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
+    <uses-permission android:name="android.permission.ACCESS_WIFI_STATE" />
+
+    <!-- 扫码核销 / 菜品拍照 -->
+    <uses-permission android:name="android.permission.CAMERA" />
+
+    <!-- 蓝牙小票打印机（12+ 用 CONNECT/SCAN，旧版本用 BLUETOOTH） -->
+    <uses-permission android:name="android.permission.BLUETOOTH" android:maxSdkVersion="30" />
+    <uses-permission android:name="android.permission.BLUETOOTH_ADMIN" android:maxSdkVersion="30" />
+    <uses-permission android:name="android.permission.BLUETOOTH_CONNECT" />
+    <uses-permission android:name="android.permission.BLUETOOTH_SCAN" />
+
+    <!-- 新单提醒 -->
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+    <!-- 锁屏全屏提醒：Android 14+ 未声明时系统只给横幅 -->
+    <uses-permission android:name="android.permission.USE_FULL_SCREEN_INTENT" />
+    <uses-permission android:name="android.permission.WAKE_LOCK" />
+    <uses-permission android:name="android.permission.VIBRATE" />
 
     <application
         android:allowBackup="false"
         android:icon="@mipmap/ic_launcher"
         android:label="${clientName}"
-        android:manageSpaceActivity="com.google.androidbrowserhelper.trusted.ManageDataLauncherActivity"
         android:roundIcon="@mipmap/ic_launcher_round"
         android:supportsRtl="true"
-        android:theme="@android:style/Theme.Translucent.NoTitleBar"
-        android:usesCleartextTraffic="false">
-        <meta-data android:name="asset_statements" android:resource="@string/asset_statements" />
+        android:theme="@android:style/Theme.DeviceDefault.NoActionBar"
+        android:usesCleartextTraffic="${usesCleartext}">
 
         <activity
-            android:name="com.google.androidbrowserhelper.trusted.ManageDataLauncherActivity"
-            android:enabled="true"
-            android:excludeFromRecents="true"
-            android:exported="false">
-            <meta-data android:name="android.support.customtabs.trusted.MANAGE_SPACE_URL" android:value="${startUrl}" />
-            <intent-filter>
-                <action android:name="android.intent.action.APPLICATION_PREFERENCES" />
-                <category android:name="android.intent.category.DEFAULT" />
-            </intent-filter>
-        </activity>
-
-        <activity
-            android:name="com.google.androidbrowserhelper.trusted.LauncherActivity"
-            android:alwaysRetainTaskState="true"
-            android:exported="true">
-            <meta-data android:name="android.support.customtabs.trusted.DEFAULT_URL" android:value="${startUrl}" />
-            <meta-data android:name="android.support.customtabs.trusted.FALLBACK_STRATEGY" android:value="@string/fallback_strategy" />
-            <meta-data android:name="android.support.customtabs.trusted.SPLASH_IMAGE_DRAWABLE" android:resource="@drawable/splash_logo" />
-            <meta-data android:name="android.support.customtabs.trusted.SPLASH_SCREEN_BACKGROUND_COLOR" android:resource="@color/splash_background" />
-            <meta-data android:name="android.support.customtabs.trusted.SPLASH_SCREEN_FADE_OUT_DURATION" android:value="300" />
-            <meta-data android:name="android.support.customtabs.trusted.STATUS_BAR_COLOR" android:resource="@color/status_bar" />
-            <meta-data android:name="android.support.customtabs.trusted.STATUS_BAR_COLOR_DARK" android:resource="@color/status_bar_dark" />
-            <meta-data android:name="android.support.customtabs.trusted.NAVIGATION_BAR_COLOR" android:resource="@color/navigation_bar" />
-            <meta-data android:name="android.support.customtabs.trusted.NAVIGATION_BAR_COLOR_DARK" android:resource="@color/navigation_bar_dark" />
+            android:name=".MainActivity"
+            android:configChanges="orientation|screenSize|smallestScreenSize|screenLayout|keyboardHidden|uiMode"
+            android:exported="true"
+            android:launchMode="singleTask"
+            android:windowSoftInputMode="adjustResize">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />

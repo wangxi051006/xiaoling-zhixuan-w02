@@ -5,6 +5,7 @@
 | 用户小程序 | `apps/user-miniprogram` | 用户商城 HTTPS 域名 |
 | 校零智选商家 | `apps/merchant-app` | 独立商家 HTTPS 域名，包名 `cn.xiaoling.merchant` |
 | 校零智选骑手 | `apps/rider-app` | 独立骑手 HTTPS 域名，包名 `cn.xiaoling.rider` |
+| 校零智选（用户端） | `apps/user-app` | 用户商城 HTTPS 域名，包名 `cn.xiaoling.user` |
 
 运营、财务和账号管理继续使用管理网页。三个客户端共用 Go API 和 PostgreSQL。
 
@@ -18,18 +19,19 @@
 
 ## Android
 
-两个包各自启动对应域名的 Trusted Web Activity。支持该能力的浏览器依据 Digital Asset Links 验证关联，员工登录和 MFA 继续走正式 IdP 的浏览器流程。在实际派发的手机上验证默认浏览器、登录回跳及从桌面再次打开的行为。
+三个包各自启动对应域名的 Trusted Web Activity（用户端 `apps/user-app`、商家端 `apps/merchant-app`、骑手端 `apps/rider-app`）。支持该能力的浏览器依据 Digital Asset Links 验证关联，员工登录和 MFA 继续走正式 IdP 的浏览器流程。在实际派发的手机上验证默认浏览器、登录回跳及从桌面再次打开的行为。
 
-在 `web` 运行 `npm run build:merchant`，将 `dist-merchant` 的内容部署至 Caddy 的 `static/merchant`。骑手使用现有 `static/rider` 构建。配置 `MERCHANT_ORIGIN`、`MERCHANT_HOST` 和覆盖商家域名的证书，并把商家域名加 `/api/v1/auth/staff/callback` 加入 IdP 回调。在两个对应站点各自提供 `/.well-known/assetlinks.json`，可用 `node apps/merchant-app/assetlinks.mjs merchant <SHA-256指纹>` 或 `node apps/rider-app/assetlinks.mjs rider <SHA-256指纹>` 生成。指纹使用手机上实际安装包的签名证书。
+用户端在 `web` 运行 `npm run build`，用 `deploy/scripts/split-static.mjs` 把 `dist` 拆到 `static/user`（TWA 入口 `<用户域名>/user.html`）。商家端运行 `npm run build:merchant`，将 `dist-merchant` 的内容部署至 Caddy 的 `static/merchant`。骑手使用现有 `static/rider` 构建。配置 `MERCHANT_ORIGIN`、`MERCHANT_HOST` 和覆盖商家域名的证书，并把商家域名加 `/api/v1/auth/staff/callback` 加入 IdP 回调。在两个对应站点各自提供 `/.well-known/assetlinks.json`，可用 `node apps/merchant-app/assetlinks.mjs merchant <SHA-256指纹>` 、`node apps/rider-app/assetlinks.mjs rider <SHA-256指纹>` 或 `node apps/user-app/assetlinks.mjs user <SHA-256指纹>` 生成（`apps/user-app/assetlinks.mjs` 同时支持 user/merchant/rider 三个角色）。指纹使用手机上实际安装包的签名证书。
 
-在 Android Studio 分别打开 `apps/merchant-app` 和 `apps/rider-app`。使用 JDK 17、Gradle 8.11.1 和 Android SDK Platform 36，设置 `ANDROID_HOME`，并为各工程设置对应的 `MERCHANT_ORIGIN` 或 `RIDER_ORIGIN`。在仓库根目录分别执行下列命令构建调试包。
+三个工程可以在 Android Studio 分别打开（或双击各目录的 `本地打开-AndroidStudio.bat`），也可以直接用仓库根目录的 `tools\build-apk.cmd` 一条命令打三端 debug 包。使用 JDK 17、Gradle 8.11.1 和 Android SDK Platform 36，设置 `ANDROID_HOME`，并为各工程设置对应的 `MERCHANT_ORIGIN`、`USER_ORIGIN` 或 `RIDER_ORIGIN`。在仓库根目录分别执行下列命令构建调试包。
 
 ```powershell
 gradle -p apps/merchant-app :merchant:assembleDebug
+gradle -p apps/user-app :user:assembleDebug
 gradle -p apps/rider-app :rider:assembleDebug
 ```
 
-调试包分别输出到 `apps/merchant-app/merchant/build/outputs/apk/debug/` 和 `apps/rider-app/rider/build/outputs/apk/debug/`。发布时使用各自的正式签名构建并验证两个发行包。
+调试包分别输出到 `apps/merchant-app/merchant/build/outputs/apk/debug/`、`apps/user-app/user/build/outputs/apk/debug/` 和 `apps/rider-app/rider/build/outputs/apk/debug/`。发布时使用各自的正式签名构建并验证三个发行包。
 
 ## 开通商家
 

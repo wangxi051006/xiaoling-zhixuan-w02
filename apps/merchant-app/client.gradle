@@ -49,6 +49,17 @@ android {
     namespace = clientId
     compileSdk = 36
 
+    compileOptions {
+        sourceCompatibility = JavaVersion.VERSION_17
+        targetCompatibility = JavaVersion.VERSION_17
+    }
+
+    // Kotlin 的 jvmTarget 必须与 javac 的 target 一致，否则 compileDebugKotlin 会以
+    // "Inconsistent JVM-target compatibility detected" 直接失败。
+    kotlinOptions {
+        jvmTarget = '17'
+    }
+
     // 版本号可用 -PappVersionCode / -PappVersionName 覆盖，便于发版脚本注入
     def appVersionCode = (findProperty('appVersionCode') ?: '1').toInteger()
     def appVersionName = (findProperty('appVersionName') ?: '1.0.0').toString()
@@ -63,8 +74,18 @@ android {
             clientName: clientName,
             startUrl: startUrl,
             startHost: originHost,
+            usesCleartext: isLocalOrigin ? 'true' : 'false',
         ]
         resValue 'string', 'asset_statements', assetStatements.replace('"', '\\"')
+
+        // 原生壳的编译期常量（页面地址 / host / 是否允许明文）
+        buildConfigField 'String', 'START_URL', '"' + startUrl + '"'
+        buildConfigField 'String', 'START_HOST', '"' + originHost + '"'
+        buildConfigField 'boolean', 'ALLOW_CLEARTEXT', isLocalOrigin ? 'true' : 'false'
+    }
+
+    buildFeatures {
+        buildConfig = true
     }
 
     // 正式签名只从环境变量读取：keystore 与口令都不进仓库；缺失时 release 构建保持未签名
@@ -95,9 +116,7 @@ android {
     sourceSets.main.manifest.srcFile rootProject.file('AndroidManifest.xml')
 }
 
-dependencies {
-    implementation 'com.google.androidbrowserhelper:androidbrowserhelper:2.7.4'
-}
+// 原生壳依赖在 merchant/build.gradle 声明（TWA 的 androidbrowserhelper 已移除）
 
 // release 一律拒绝 http origin：只有当本次构建确实在打 release 变体时才失败，
 // 以免仅同步/打 debug 包时因为这条规则而配置失败。

@@ -11,8 +11,10 @@
       tools\dev-stack.ps1 restart        重启
       tools\dev-stack.ps1 init-db        首次初始化：initdb + 注册服务 + 建库
 
-  默认端口：Vite 5174、后端 8080、PostgreSQL 5432。
-  默认入口：http://rider.localhost:5174/rider.html（后端测试登录账号 123456 / 123456）。
+  默认端口：商家/骑手/运营 Vite 5173、用户端 Vite 5194、后端 8080、PostgreSQL 5432。
+  默认入口：http://rider.localhost:5173/rider.html（后端测试登录账号 123456 / 123456）。
+  这些端口必须与 APK（apps/*/local.properties）和小程序（apps/user-miniprogram/storefront.js）
+  写死的 origin 一致；任一端改端口都要同步改客户端，否则后端按入口 origin 拒绝并返回 404。
   状态文件与日志放在仓库根的 .dev-stack/（已加入 .gitignore）。
 
 .EXAMPLE
@@ -25,7 +27,8 @@
 param(
     [ValidateSet('start', 'stop', 'restart', 'status', 'init-db')]
     [string]$Action = 'status',
-    [int]$WebPort = 5174,
+    [int]$WebPort = 5173,
+    [int]$UserPort = 5194,
     [int]$ApiPort = 8080,
     [string]$PgService = 'pgsql-local',
     [string]$PgHome = (Join-Path $HOME 'pgsql'),
@@ -45,21 +48,24 @@ $Web = Join-Path $Root 'web'
 $ApiExe = Join-Path $State 'campus-api.exe'
 $ApiPidFile = Join-Path $State 'api.pid'
 $WebPidFile = Join-Path $State 'web.pid'
+$UserWebPidFile = Join-Path $State 'user-web.pid'
 
 $Sdk = if ($env:ANDROID_HOME) { $env:ANDROID_HOME } else { Join-Path $env:LOCALAPPDATA 'Android\Sdk' }
 $Adb = Join-Path $Sdk 'platform-tools\adb.exe'
 $Emulator = Join-Path $Sdk 'emulator\emulator.exe'
 
-$DbUrl = "postgres://postgres@127.0.0.1:5432/$DbName?sslmode=disable"
+# 变量名后紧跟 ?sslmode 时 PowerShell 会把 DbName?sslmode 当成变量名，必须用 ${DbName} 划定边界。
+$DbUrl = "postgres://postgres@127.0.0.1:5432/${DbName}?sslmode=disable"
 
-# 三个入口必须是 <entry>.localhost，端口与 WebPort 一致，后端才放行测试登录。
+# 四个入口必须是 <entry>.localhost：员工端与 WebPort 一致，用户端与 UserPort 一致，后端才放行测试登录。
 $env:APP_ENV = 'development'
 $env:HTTP_ADDR = "127.0.0.1:$ApiPort"
 $env:DATABASE_URL = $DbUrl
 $env:MIGRATION_DATABASE_URL = $DbUrl
-$env:USER_ORIGIN = "http://user.localhost:$WebPort"
+$env:USER_ORIGIN = "http://user.localhost:$UserPort"
 $env:RIDER_ORIGIN = "http://rider.localhost:$WebPort"
 $env:ADMIN_ORIGIN = "http://admin.localhost:$WebPort"
+$env:MERCHANT_ORIGIN = "http://merchant.localhost:$WebPort"
 $env:ALLOW_TEST_AUTH = 'true'
 $env:COD_ENABLED = 'true'
 $env:ORDERS_ENABLED = 'true'
@@ -237,19 +243,19 @@ function Start-Api {
     Write-Ok "后端 运行中 http://127.0.0.1:$ApiPort（PID $($proc.Id)，日志 $outLog）"
 }
 
-function Start-Web {
-    if (Test-Port $WebPort) {
-        $portPid = Get-PortPid $WebPort
-        $recorded = Read-Pid $WebPidFile
+function Start-Vite([string]$Label, [int]$Port, [string]$PidFile, [string]$LogName) {
+    if (Test-Port $Port) {
+        $portPid = Get-PortPid $Port
+        $recorded = Read-Pid $PidFile
         if ($recorded -eq $portPid -and $recorded -gt 0) {
-            Write-Ok "Vite 已在运行（PID $portPid，端口 $WebPort）"
+            Write-Ok "$Label 已在运行（PID $portPid，端口 $Port）"
             return
         } elseif ($Force) {
-            Write-Warn2 "端口 $WebPort 被外部进程 PID $portPid 占用，-Force 已接管"
+            Write-Warn2 "端口 $Port 被外部进程 PID $portPid 占用，-Force 已接管"
             Stop-Process -Id $portPid -Force -ErrorAction SilentlyContinue
             Start-Sleep -Seconds 2
         } else {
-            Write-Warn2 "端口 $WebPort 已被 PID $portPid 占用，跳过启动 Vite（加 -Force 可接管）"
+            Write-Warn2 "端口 $Port 已被 PID $portPid 占用，跳过启动 $Label（加 -Force 可接管）"
             return
         }
     }
@@ -257,13 +263,18 @@ function Start-Web {
     if (-not (Test-Path $vite)) { throw "找不到 $vite，先在 web/ 执行 npm ci" }
     $node = Get-Command node -ErrorAction SilentlyContinue
     if (-not $node) { throw 'PATH 里找不到 node' }
-    $outLog = Join-Path $State 'web.out.log'
-    $errLog = Join-Path $State 'web.err.log'
-    $args = @($vite, '--port', $WebPort, '--strictPort', '--host', '127.0.0.1')
-    $proc = Start-Process -FilePath $node.Source -WorkingDirectory $Web -WindowStyle Hidden -ArgumentList $args -RedirectStandardOutput $outLog -RedirectStandardError $errLog -PassThru
-    Save-Pid $WebPidFile $proc.Id
-    if (-not (Wait-Port $WebPort 40)) { throw "Vite 没有在 $WebPort 起监听，日志：$errLog" }
-    Write-Ok "Vite 运行中 http://127.0.0.1:$WebPort（PID $($proc.Id)，日志 $outLog）"
+    $outLog = Join-Path $State "$LogName.out.log"
+    $errLog = Join-Path $State "$LogName.err.log"
+    $viteArgs = @($vite, '--port', $Port, '--strictPort', '--host', '127.0.0.1')
+    $proc = Start-Process -FilePath $node.Source -WorkingDirectory $Web -WindowStyle Hidden -ArgumentList $viteArgs -RedirectStandardOutput $outLog -RedirectStandardError $errLog -PassThru
+    Save-Pid $PidFile $proc.Id
+    if (-not (Wait-Port $Port 40)) { throw "$Label 没有在 $Port 起监听，日志：$errLog" }
+    Write-Ok "$Label 运行中 http://127.0.0.1:$Port（PID $($proc.Id)，日志 $outLog）"
+}
+
+function Start-Web {
+    Start-Vite 'Vite 员工端' $WebPort $WebPidFile 'web'
+    Start-Vite 'Vite 用户端' $UserPort $UserWebPidFile 'user-web'
 }
 
 function Start-Devices {
@@ -283,8 +294,10 @@ function Start-Devices {
     if (-not $devices) { Write-Warn2 '没有连接中的设备，跳过 adb reverse'; return }
     & $Adb reverse "tcp:$WebPort" "tcp:$WebPort" | Out-Null
     Write-Ok "adb reverse tcp:$WebPort -> tcp:$WebPort"
+    & $Adb reverse "tcp:$UserPort" "tcp:$UserPort" | Out-Null
+    Write-Ok "adb reverse tcp:$UserPort -> tcp:$UserPort"
     & $Adb shell am force-stop cn.xiaoling.rider 2>$null | Out-Null
-    & $Adb shell am start -n cn.xiaoling.rider/com.google.androidbrowserhelper.trusted.LauncherActivity 2>$null | Out-Null
+    & $Adb shell am start -n cn.xiaoling.rider/.MainActivity 2>$null | Out-Null
     Write-Ok '已在设备上打开骑手端'
 }
 
@@ -292,7 +305,8 @@ function Show-Status {
     $rows = @(
         @{ Name = 'PostgreSQL'; Port = 5432; Url = "postgres://127.0.0.1:5432/$DbName" },
         @{ Name = 'Go API'; Port = $ApiPort; Url = "http://127.0.0.1:$ApiPort" },
-        @{ Name = 'Vite'; Port = $WebPort; Url = "http://rider.localhost:$WebPort/rider.html" }
+        @{ Name = 'Vite 员工'; Port = $WebPort; Url = "http://rider.localhost:$WebPort/rider.html" },
+        @{ Name = 'Vite 用户'; Port = $UserPort; Url = "http://user.localhost:$UserPort/user.html" }
     )
     foreach ($row in $rows) {
         $portPid = Get-PortPid $row.Port
@@ -347,16 +361,21 @@ switch ($Action) {
         Start-Web
         Start-Devices
         Show-Status
-        Write-Host "  入口        http://rider.localhost:$WebPort/rider.html（测试登录 123456 / 123456）"
+        Write-Host "  商家端      http://merchant.localhost:$WebPort/merchant.html"
+        Write-Host "  骑手端      http://rider.localhost:$WebPort/rider.html"
+        Write-Host "  用户端      http://user.localhost:$UserPort/user.html"
+        Write-Host "  运营端      http://admin.localhost:$WebPort/admin.html（测试登录 123456 / 123456）"
     }
     'stop' {
         Stop-Recorded $ApiPidFile $ApiPort
         Stop-Recorded $WebPidFile $WebPort
+        Stop-Recorded $UserWebPidFile $UserPort
         Write-Ok ("已停止后端与前端；PostgreSQL 服务保持运行（如需停止：sc stop " + $PgService + "）")
     }
     'restart' {
         Stop-Recorded $ApiPidFile $ApiPort
         Stop-Recorded $WebPidFile $WebPort
+        Stop-Recorded $UserWebPidFile $UserPort
         Start-Sleep -Seconds 2
         Ensure-Postgres
         Start-Api

@@ -1,0 +1,114 @@
+// user-app 的 TWA 壳逻辑：与 apps/merchant-app/client.gradle 同构。
+// 差异只有三处：origin 变量名（USER_ORIGIN）、互斥的 peer origin 列表、签名环境变量前缀（USER_）。
+// origin 的解析顺序：-P / gradle.properties → 环境变量 → local.properties（本机、不入库）。
+def localProps = new Properties()
+def localPropsFile = rootProject.file('local.properties')
+if (localPropsFile.exists()) {
+    localPropsFile.withInputStream { localProps.load(it) }
+}
+def configValue = { String name ->
+    def candidate = [project.findProperty(name), project.providers.environmentVariable(name).orNull, localProps.getProperty(name)]
+            .find { it != null && !it.toString().trim().isEmpty() }
+    candidate == null ? null : candidate.toString().trim()
+}
+
+// 只解析模型（IDE 同步）时没有任何构建任务：允许暂时缺省，用占位 origin 让工程配置完成。
+def syncOnly = gradle.startParameter.taskNames.isEmpty()
+def origin = configValue(originVariable)
+if (origin == null && syncOnly) {
+    origin = "https://${clientId}.invalid"
+    logger.lifecycle("${originVariable} 未配置：本次只是 Gradle 同步，使用占位 origin ${origin}；构建 APK 前请写入 local.properties")
+}
+if (origin == null) {
+    throw new GradleException("${originVariable} is required to build: put it in local.properties, export it as an environment variable, or pass -P${originVariable}=https://…")
+}
+def isHttpsOrigin = origin ==~ /https:\/\/[a-z0-9-]+(\.[a-z0-9-]+)+/
+def isLocalOrigin = origin ==~ /http:\/\/((10\.0\.2\.2|127\.0\.0\.1)|[a-z0-9-]+\.localhost):\d{1,5}(\/[A-Za-z0-9._~\/-]*)?/
+def localOptIn = configValue('ALLOW_LOCAL_ORIGIN') == '1'
+if (!isHttpsOrigin && !isLocalOrigin) {
+    throw new GradleException("${originVariable} must be the deployed HTTPS origin without a trailing slash (got: ${origin})")
+}
+if (isLocalOrigin && !localOptIn) {
+    throw new GradleException("Local HTTP ${originVariable} (${origin}) requires ALLOW_LOCAL_ORIGIN=1 and is limited to debug builds")
+}
+// 三个客户端必须各自独立入口，否则后端按 origin 分流会串号。
+def peers = (findProperty('peerOriginVariables') ?: 'MERCHANT_ORIGIN,RIDER_ORIGIN').toString().split(',')
+peers.each { String raw ->
+    def peerName = raw.trim()
+    if (!peerName.isEmpty()) {
+        def peer = configValue(peerName)
+        if (peer != null && peer == origin) {
+            throw new GradleException("${originVariable} must differ from ${peerName}; each client needs its own entry origin")
+        }
+    }
+}
+
+def assetStatements = groovy.json.JsonOutput.toJson([
+    [relation: ['delegate_permission/common.handle_all_urls'], target: [namespace: 'web', site: origin]]
+])
+def originUri = new java.net.URI(origin)
+def originHost = originUri.host
+// 无路径时补结尾斜杠；带路径（本地 dev 入口，如 /user.html）时原样使用
+def startUrl = originUri.path ? origin : origin + '/'
+
+android {
+    namespace = clientId
+    compileSdk = 36
+
+    // 版本号可用 -PappVersionCode / -PappVersionName 覆盖，便于发版脚本注入
+    def appVersionCode = (findProperty('appVersionCode') ?: '1').toInteger()
+    def appVersionName = (findProperty('appVersionName') ?: '1.0.0').toString()
+
+    defaultConfig {
+        applicationId = clientId
+        minSdk = 24
+        targetSdk = 36
+        versionCode = appVersionCode
+        versionName = appVersionName
+        manifestPlaceholders = [
+            clientName: clientName,
+            startUrl: startUrl,
+            startHost: originHost,
+        ]
+        resValue 'string', 'asset_statements', assetStatements.replace('"', '\\"')
+    }
+
+    // 正式签名只从环境变量读取（USER_KEYSTORE / USER_KEYSTORE_PASSWORD / USER_KEY_ALIAS / USER_KEY_PASSWORD）。
+    // keystore 与口令都不进仓库；缺失时 release 构建保持未签名。
+    def signingPrefix = (findProperty('signingPrefix') ?: project.name).toString().toUpperCase()
+    def envVar = { String n -> providers.environmentVariable(n).orNull }
+    def keystorePath = envVar("${signingPrefix}_KEYSTORE")
+    def hasReleaseKey = keystorePath != null && file(keystorePath).exists()
+
+    signingConfigs {
+        if (hasReleaseKey) {
+            release {
+                storeFile file(keystorePath)
+                storePassword envVar("${signingPrefix}_KEYSTORE_PASSWORD")
+                keyAlias envVar("${signingPrefix}_KEY_ALIAS")
+                keyPassword envVar("${signingPrefix}_KEY_PASSWORD")
+            }
+        }
+    }
+
+    buildTypes {
+        release {
+            minifyEnabled = false
+            shrinkResources = false
+            if (hasReleaseKey) {
+                signingConfig = signingConfigs.release
+            }
+        }
+    }
+
+    sourceSets.main.manifest.srcFile rootProject.file('AndroidManifest.xml')
+}
+
+dependencies {
+    implementation 'com.google.androidbrowserhelper:androidbrowserhelper:2.7.4'
+}
+
+// release 一律拒绝 http origin：只有当本次构建确实在打 release 变体时才失败。
+if (!isHttpsOrigin && gradle.startParameter.taskNames.join(' ').toLowerCase().contains('release')) {
+    throw new GradleException("Release builds must use an HTTPS ${originVariable}; got ${origin}")
+}

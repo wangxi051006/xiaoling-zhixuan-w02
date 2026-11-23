@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- 用户商城品牌色，取自 web/src/user/style.css 的 .logo / 纸感底色 -->
+    <color name="brand_red">#D9603A</color>
+    <color name="brand_paper">#FBF5EA</color>
+    <color name="brand_card">#FFFDF8</color>
+    <color name="brand_ink">#2E2A24</color>
+    <color name="brand_green">#35664F</color>
+
+    <!-- 用户端移动商城：奶油底 + 白色卡片（web/src/user/storefront.css） -->
+    <color name="status_bar">#FBF5EA</color>
+    <color name="status_bar_dark">#151A22</color>
+    <color name="navigation_bar">#FFFFFF</color>
+    <color name="navigation_bar_dark">#151A22</color>
+    <color name="splash_background">#FBF5EA</color>
+</resources>

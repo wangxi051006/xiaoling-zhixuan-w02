@@ -1,0 +1,9 @@
+plugins {
+    id 'com.android.application'
+}
+
+ext.clientId = 'cn.xiaoling.user'
+ext.clientName = '校零智选'
+ext.originVariable = 'USER_ORIGIN'
+ext.peerOriginVariables = 'MERCHANT_ORIGIN,RIDER_ORIGIN'
+apply from: rootProject.file('client.gradle')
